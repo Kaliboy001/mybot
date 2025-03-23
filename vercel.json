@@ -16,6 +16,11 @@
       "dest": "created.js"
     },
     {
+      "src": "/resolve-session",
+      "methods": ["POST"],
+      "dest": "created.js"
+    },
+    {
       "src": "/(.*)",
       "dest": "maker.js"
     }
