@@ -1,18 +1,13 @@
 {
-  "name": "mybot",
+  "name": "mybot-drab",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "main": "created.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node created.js"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
   "dependencies": {
-    "axios": "^1.6.8",
-    "isgd": "^1.1.3",
-    "mongoose": "^8.2.3",
-    "telegraf": "^4.12.2"
+    "telegraf": "^4.16.3",
+    "mongoose": "^8.7.0",
+    "isgd": "^1.1.3"
   }
 }
