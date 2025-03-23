@@ -2,7 +2,7 @@ const { Telegraf } = require('telegraf');
 const mongoose = require('mongoose');
 
 // MongoDB Connection
-const MONGO_URI = process.env.MONGO_URI; // Ensure this is correct
+const MONGO_URI = process.env.MONGO_URI;
 
 if (!MONGO_URI) {
   console.error('Missing MONGO_URI environment variable');
