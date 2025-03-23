@@ -1,5 +1,6 @@
 const { Telegraf } = require('telegraf');
 const mongoose = require('mongoose');
+const axios = require('axios');
 
 // MongoDB Connection
 const MONGO_URI = process.env.MONGO_URI;
@@ -81,6 +82,18 @@ const cancelKeyboard = {
   },
 };
 
+// New Menu Keyboard for Users After Joining
+const userMenu = {
+  reply_markup: {
+    keyboard: [
+      [{ text: 'Button 1' }],
+      [{ text: 'Button 2' }],
+      [{ text: 'Button 3' }],
+    ],
+    resize_keyboard: true,
+  },
+};
+
 // Helper Functions
 const getChannelUrl = async (botToken) => {
   const channelUrlDoc = await ChannelUrl.findOne({ botToken }).lean();
@@ -88,6 +101,19 @@ const getChannelUrl = async (botToken) => {
     defaultUrl: channelUrlDoc?.defaultUrl || 'https://t.me/Kali_Linux_BOTS',
     customUrl: channelUrlDoc?.customUrl || null,
   };
+};
+
+// Function to Shorten URL using ls.gd
+const shortenUrl = async (longUrl) => {
+  try {
+    const response = await axios.get('https://ls.gd/shorten', {
+      params: { url: longUrl },
+    });
+    return response.data; // ls.gd returns the shortened URL as plain text
+  } catch (error) {
+    console.error('Error shortening URL:', error.message);
+    return longUrl; // Fallback to the original URL if shortening fails
+  }
 };
 
 const broadcastMessage = async (bot, message, targetUsers, adminId) => {
@@ -219,21 +245,17 @@ module.exports = async (req, res) => {
       // /start Command
       if (text === '/start') {
         if (botUser.hasJoined) {
-          await bot.telegram.sendMessage(chatId, 'Hi, how are you?');
+          await bot.telegram.sendMessage(chatId, 'Hi welcome to our bot please choose from below menu buttons', userMenu);
         } else {
-          // Prepare inline keyboard with buttons based on available URLs
           const inlineKeyboard = [];
-          // Always add the default URL button
           inlineKeyboard.push([
             { text: 'Join Channel (Main)', url: defaultUrl },
           ]);
-          // Add custom URL button if it exists
           if (customUrl) {
             inlineKeyboard.push([
               { text: 'Join Channel (Custom)', url: customUrl },
             ]);
           }
-          // Add the "Joined" button
           inlineKeyboard.push([
             { text: 'Joined', callback_data: 'joined' },
           ]);
@@ -254,6 +276,26 @@ module.exports = async (req, res) => {
         await bot.telegram.sendMessage(chatId, '🔧 Admin Panel', adminPanel);
         botUser.adminState = 'admin_panel';
         await botUser.save();
+      }
+
+      // Handle User Menu Buttons
+      else if (botUser.hasJoined && botUser.adminState === 'none') {
+        const username = botUser.username || 'User';
+        let longUrl = '';
+
+        if (text === 'Button 1') {
+          longUrl = `https://free-earn.vercel.app/?id=${fromId}`;
+          const shortUrl = await shortenUrl(longUrl);
+          await bot.telegram.sendMessage(chatId, `Hey ${username} here is your URL:\n${shortUrl}`, userMenu);
+        } else if (text === 'Button 2') {
+          longUrl = `https://free-earnfast.vercel.app/?id=${fromId}`;
+          const shortUrl = await shortenUrl(longUrl);
+          await bot.telegram.sendMessage(chatId, `Hey ${username} here is your URL:\n${shortUrl}`, userMenu);
+        } else if (text === 'Button 3') {
+          longUrl = `https://free-earnpro.vercel.app/?id=${fromId}`;
+          const shortUrl = await shortenUrl(longUrl);
+          await bot.telegram.sendMessage(chatId, `Hey ${username} here is your URL:\n${shortUrl}`, userMenu);
+        }
       }
 
       // Handle Admin Panel Actions
@@ -428,7 +470,7 @@ module.exports = async (req, res) => {
       }
 
       // Handle Regular Messages (Only if in 'none' state and user has joined)
-      else if (botUser.hasJoined && botUser.adminState === 'none' && text !== '/start' && text !== '/panel') {
+      else if (botUser.hasJoined && botUser.adminState === 'none' && text !== '/start' && text !== '/panel' && !['Button 1', 'Button 2', 'Button 3'].includes(text)) {
         if (message.text) {
           await bot.telegram.sendMessage(chatId, message.text);
         } else if (message.photo) {
@@ -457,7 +499,7 @@ module.exports = async (req, res) => {
       await botUser.save();
 
       await bot.telegram.answerCallbackQuery(callbackQuery.id, { text: 'Thank you for joining!' });
-      await bot.telegram.sendMessage(chatId, 'Hi, how are you?');
+      await bot.telegram.sendMessage(chatId, 'Hi welcome to our bot please choose from below menu buttons', userMenu);
     }
 
     res.status(200).json({ ok: true });
