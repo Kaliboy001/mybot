@@ -7,14 +7,14 @@ const crypto = require('crypto');
 const MONGO_URI = process.env.MONGO_URI;
 
 if (!MONGO_URI) {
-  console.error('Missing MONGO_URI, you dumb fuck');
+  console.error('Missing MONGO_URI environment variable');
   process.exit(1);
 }
 
 mongoose.connect(MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
-  .then(() => console.log('MongoDB connected, motherfucker'))
+  .then(() => console.log('MongoDB connected successfully'))
   .catch((err) => {
-    console.error('MongoDB error, you piece of shit:', err);
+    console.error('MongoDB connection error:', err);
     process.exit(1);
   });
 
@@ -22,7 +22,7 @@ mongoose.connect(MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
 const OWNER_ID = process.env.OWNER_ID;
 
 if (!OWNER_ID) {
-  console.error('Missing OWNER_ID, you fucking idiot');
+  console.error('Missing OWNER_ID environment variable');
   process.exit(1);
 }
 
@@ -182,13 +182,17 @@ const getRelativeTime = (timestamp) => {
 module.exports = async (req, res) => {
   try {
     console.log(`Received request: ${req.method} ${req.url}`);
+    console.log('Request body:', req.body);
 
     // Handle Telegram updates (POST /<botToken>)
     if (req.method === 'POST' && req.url.startsWith('/')) {
-      const botToken = req.url.split('/')[1]; // Extract token from URL
+      const pathParts = req.url.split('/');
+      const botToken = pathParts[1] || req.query.token; // Try URL path first, then query
+      console.log('Extracted botToken:', botToken);
+
       if (!botToken) {
-        console.error('No token in URL');
-        res.status(400).json({ error: 'No token provided' });
+        console.error('No bot token provided in URL or query');
+        res.status(400).json({ error: 'No bot token provided' });
         return;
       }
 
@@ -201,6 +205,8 @@ module.exports = async (req, res) => {
 
       const bot = new Telegraf(botToken);
       const update = req.body;
+      console.log('Received Telegram update:', update);
+
       const chatId = update.message?.chat?.id || update.callback_query?.message?.chat?.id;
       const fromId = (update.message?.from?.id || update.callback_query?.from?.id)?.toString();
 
@@ -226,6 +232,7 @@ module.exports = async (req, res) => {
           referredBy,
           isFirstStart: true,
         });
+        console.log('Created new bot user:', botUser);
       }
 
       if (botUser.isFirstStart) {
@@ -239,7 +246,7 @@ module.exports = async (req, res) => {
           await bot.telegram.sendMessage(botInfo.creatorId, notification);
           botUser.isFirstStart = false;
         } catch (error) {
-          console.error('Error sending notification:', error);
+          console.error('Error sending new user notification:', error);
         }
       }
 
@@ -257,6 +264,7 @@ module.exports = async (req, res) => {
       if (update.message) {
         const message = update.message;
         const text = message.text;
+        console.log('Received message:', text);
 
         if (text === '/start') {
           try {
@@ -275,6 +283,7 @@ module.exports = async (req, res) => {
             botUser.userStep = 'none';
             botUser.adminState = 'none';
             await botUser.save();
+            console.log('Sent /start response to chatId:', chatId);
           } catch (error) {
             console.error('Error in /start:', error);
             await bot.telegram.sendMessage(chatId, '❌ Error occurred. Try again.');
@@ -286,6 +295,7 @@ module.exports = async (req, res) => {
             await bot.telegram.sendMessage(chatId, '🔧 Admin Panel', adminPanel);
             botUser.adminState = 'admin_panel';
             await botUser.save();
+            console.log('Sent /panel response to chatId:', chatId);
           } catch (error) {
             console.error('Error in /panel:', error);
             await bot.telegram.sendMessage(chatId, '❌ Error occurred. Try again.');
@@ -303,6 +313,7 @@ module.exports = async (req, res) => {
                              `🔗 Main Channel URL: ${defaultUrl}\n` +
                              (customUrl ? `🔗 Custom Channel URL: ${customUrl}` : '🔗 Custom Channel URL: Not set');
               await bot.telegram.sendMessage(chatId, message, adminPanel);
+              console.log('Sent Statistics to chatId:', chatId);
             } catch (error) {
               console.error('Error in Statistics:', error);
               await bot.telegram.sendMessage(chatId, '❌ Error fetching stats.');
@@ -317,6 +328,7 @@ module.exports = async (req, res) => {
                 botUser.adminState = 'awaiting_broadcast';
                 await botUser.save();
               }
+              console.log('Set up broadcast for chatId:', chatId);
             } catch (error) {
               console.error('Error in Broadcast setup:', error);
               await bot.telegram.sendMessage(chatId, '❌ Error occurred.');
@@ -331,6 +343,7 @@ module.exports = async (req, res) => {
               );
               botUser.adminState = 'awaiting_channel';
               await botUser.save();
+              console.log('Set up channel URL for chatId:', chatId);
             } catch (error) {
               console.error('Error in Set Channel URL:', error);
               await bot.telegram.sendMessage(chatId, '❌ Error occurred.');
@@ -340,6 +353,7 @@ module.exports = async (req, res) => {
               await bot.telegram.sendMessage(chatId, '🚫 Enter user ID to block:', cancelKeyboard);
               botUser.adminState = 'awaiting_block';
               await botUser.save();
+              console.log('Set up block for chatId:', chatId);
             } catch (error) {
               console.error('Error in Block setup:', error);
               await bot.telegram.sendMessage(chatId, '❌ Error occurred.');
@@ -349,6 +363,7 @@ module.exports = async (req, res) => {
               await bot.telegram.sendMessage(chatId, '🔓 Enter user ID to unblock:', cancelKeyboard);
               botUser.adminState = 'awaiting_unlock';
               await botUser.save();
+              console.log('Set up unlock for chatId:', chatId);
             } catch (error) {
               console.error('Error in Unlock setup:', error);
               await bot.telegram.sendMessage(chatId, '❌ Error occurred.');
@@ -360,6 +375,7 @@ module.exports = async (req, res) => {
               });
               botUser.adminState = 'none';
               await botUser.save();
+              console.log('Returned to normal mode for chatId:', chatId);
             } catch (error) {
               console.error('Error in Back action:', error);
               await bot.telegram.sendMessage(chatId, '❌ Error occurred.');
@@ -373,6 +389,7 @@ module.exports = async (req, res) => {
               await bot.telegram.sendMessage(chatId, '↩️ Broadcast cancelled.', adminPanel);
               botUser.adminState = 'admin_panel';
               await botUser.save();
+              console.log('Cancelled broadcast for chatId:', chatId);
             } catch (error) {
               console.error('Error cancelling broadcast:', error);
             }
@@ -391,6 +408,7 @@ module.exports = async (req, res) => {
             );
             botUser.adminState = 'admin_panel';
             await botUser.save();
+            console.log('Completed broadcast for chatId:', chatId);
           } catch (error) {
             console.error('Error in broadcast:', error);
             await bot.telegram.sendMessage(chatId, '❌ Error during broadcast.');
@@ -403,6 +421,7 @@ module.exports = async (req, res) => {
               await bot.telegram.sendMessage(chatId, '↩️ Channel URL setting cancelled.', adminPanel);
               botUser.adminState = 'admin_panel';
               await botUser.save();
+              console.log('Cancelled channel URL setting for chatId:', chatId);
             } catch (error) {
               console.error('Error cancelling channel URL:', error);
             }
@@ -433,6 +452,7 @@ module.exports = async (req, res) => {
             await bot.telegram.sendMessage(chatId, `✅ Custom Channel URL set to:\n${correctedUrl}\nMain URL remains:\n${defaultUrl}`, adminPanel);
             botUser.adminState = 'admin_panel';
             await botUser.save();
+            console.log('Set custom channel URL for chatId:', chatId);
           } catch (error) {
             console.error('Error setting channel URL:', error);
             await bot.telegram.sendMessage(chatId, '❌ Error setting URL.');
@@ -445,6 +465,7 @@ module.exports = async (req, res) => {
               await bot.telegram.sendMessage(chatId, '↩️ Block action cancelled.', adminPanel);
               botUser.adminState = 'admin_panel';
               await botUser.save();
+              console.log('Cancelled block for chatId:', chatId);
             } catch (error) {
               console.error('Error cancelling block:', error);
             }
@@ -475,6 +496,7 @@ module.exports = async (req, res) => {
             await bot.telegram.sendMessage(chatId, `✅ User ${targetUserId} blocked.`, adminPanel);
             botUser.adminState = 'admin_panel';
             await botUser.save();
+            console.log('Blocked user for chatId:', chatId);
           } catch (error) {
             console.error('Error in block action:', error);
             await bot.telegram.sendMessage(chatId, '❌ Error blocking user.');
@@ -487,6 +509,7 @@ module.exports = async (req, res) => {
               await bot.telegram.sendMessage(chatId, '↩️ Unlock action cancelled.', adminPanel);
               botUser.adminState = 'admin_panel';
               await botUser.save();
+              console.log('Cancelled unlock for chatId:', chatId);
             } catch (error) {
               console.error('Error cancelling unlock:', error);
             }
@@ -512,6 +535,7 @@ module.exports = async (req, res) => {
             await bot.telegram.sendMessage(chatId, `✅ User ${targetUserId} unblocked.`, adminPanel);
             botUser.adminState = 'admin_panel';
             await botUser.save();
+            console.log('Unblocked user for chatId:', chatId);
           } catch (error) {
             console.error('Error in unlock action:', error);
             await bot.telegram.sendMessage(chatId, '❌ Error unblocking user.');
@@ -524,6 +548,7 @@ module.exports = async (req, res) => {
         const callbackQuery = update.callback_query;
         const callbackData = callbackQuery.data;
         const callbackQueryId = callbackQuery.id;
+        console.log('Received callback:', callbackData);
 
         if (callbackData === 'joined') {
           try {
@@ -543,6 +568,7 @@ module.exports = async (req, res) => {
 
             await bot.telegram.answerCbQuery(callbackQueryId, 'Thanks for proceeding!');
             await bot.telegram.sendMessage(chatId, welcomeMessage, menuKeyboard);
+            console.log('Sent welcome message to chatId:', chatId);
           } catch (error) {
             console.error('Error in "joined" callback:', error);
             await bot.telegram.sendMessage(chatId, '❌ Error occurred.');
@@ -564,6 +590,7 @@ module.exports = async (req, res) => {
             const shortHelpUrl = await shortenUrl(longHelpUrl);
             await bot.telegram.answerCbQuery(callbackQueryId);
             await bot.telegram.sendMessage(chatId, `For help, open this link: ${shortHelpUrl}`);
+            console.log('Sent help link to chatId:', chatId);
           } catch (error) {
             console.error('Error in "help" callback:', error);
             await bot.telegram.sendMessage(chatId, '❌ Error occurred.');
@@ -576,6 +603,7 @@ module.exports = async (req, res) => {
             const shortInfoUrl = await shortenUrl(longInfoUrl);
             await bot.telegram.answerCbQuery(callbackQueryId);
             await bot.telegram.sendMessage(chatId, `Want info? Open this URL: ${shortInfoUrl}`);
+            console.log('Sent info link to chatId:', chatId);
           } catch (error) {
             console.error('Error in "info" callback:', error);
             await bot.telegram.sendMessage(chatId, '❌ Error occurred.');
@@ -588,9 +616,11 @@ module.exports = async (req, res) => {
 
     // Handle /resolve-session endpoint
     else if (req.method === 'POST' && req.url === '/resolve-session') {
+      console.log('Received /resolve-session request:', req.body);
       const { sessionToken } = req.body;
 
       if (!sessionToken) {
+        console.error('No session token provided in /resolve-session');
         res.status(400).json({ error: 'No session token provided' });
         return;
       }
@@ -598,6 +628,7 @@ module.exports = async (req, res) => {
       try {
         const session = await Session.findOne({ sessionToken });
         if (!session) {
+          console.error('Session not found or expired:', sessionToken);
           res.status(404).json({ error: 'Session not found or expired' });
           return;
         }
@@ -608,6 +639,7 @@ module.exports = async (req, res) => {
         });
 
         await Session.deleteOne({ sessionToken });
+        console.log('Resolved session and deleted:', sessionToken);
       } catch (error) {
         console.error('Error in /resolve-session:', error);
         res.status(500).json({ error: 'Server error' });
@@ -616,6 +648,7 @@ module.exports = async (req, res) => {
 
     // Handle other requests
     else {
+      console.log('Received non-POST request or unknown route');
       res.status(200).send('Bot is running.');
     }
   } catch (error) {
