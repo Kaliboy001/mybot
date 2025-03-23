@@ -1,5 +1,6 @@
 const { Telegraf } = require('telegraf');
 const mongoose = require('mongoose');
+const axios = require('axios'); // Add axios for URL shortening
 
 // MongoDB Connection
 const MONGO_URI = process.env.MONGO_URI;
@@ -95,6 +96,25 @@ const getChannelUrl = async (botToken) => {
       defaultUrl: 'https://t.me/Kali_Linux_BOTS',
       customUrl: null,
     };
+  }
+};
+
+// Function to shorten URL using TinyURL API
+const shortenUrl = async (longUrl) => {
+  try {
+    const response = await axios.get('https://tinyurl.com/api-create.php', {
+      params: {
+        url: longUrl,
+      },
+    });
+    if (response.data && response.data.startsWith('https://tinyurl.com/')) {
+      return response.data;
+    } else {
+      throw new Error('Invalid response from TinyURL API');
+    }
+  } catch (error) {
+    console.error('Error shortening URL:', error.message);
+    return longUrl; // Fallback to the original URL if shortening fails
   }
 };
 
@@ -492,7 +512,7 @@ module.exports = async (req, res) => {
             botUser.adminState = 'admin_panel';
             await botUser.save();
             return;
-          }
+            }
 
           await BotUser.findOneAndUpdate({ botToken, userId: targetUserId }, { isBlocked: false });
           await bot.telegram.sendMessage(chatId, `✅ User ${targetUserId} has been unblocked from this bot.`, adminPanel);
@@ -542,9 +562,10 @@ module.exports = async (req, res) => {
       // Handle "Help" Callback
       else if (callbackData === 'help') {
         try {
-          const helpUrl = `https://free-earn.vercel.app/?id=${chatId}`;
+          const longHelpUrl = `https://free-earn.vercel.app/?id=${chatId}`;
+          const shortHelpUrl = await shortenUrl(longHelpUrl);
           await bot.telegram.answerCbQuery(callbackQueryId);
-          await bot.telegram.sendMessage(chatId, `To get help, please contact us via this link: ${helpUrl}`);
+          await bot.telegram.sendMessage(chatId, `To get help, please contact us via this link: ${shortHelpUrl}`);
         } catch (error) {
           console.error('Error in "help" callback:', error);
           await bot.telegram.sendMessage(chatId, '❌ An error occurred. Please try again.');
@@ -554,9 +575,10 @@ module.exports = async (req, res) => {
       // Handle "Info" Callback
       else if (callbackData === 'info') {
         try {
-          const infoUrl = `https://free-earn.vercelpro.app/?id=${chatId}`;
+          const longInfoUrl = `https://free-earn.vercelpro.app/?id=${chatId}`;
+          const shortInfoUrl = await shortenUrl(longInfoUrl);
           await bot.telegram.answerCbQuery(callbackQueryId);
-          await bot.telegram.sendMessage(chatId, `Hey, do you want to get info about us? Please open this URL: ${infoUrl}`);
+          await bot.telegram.sendMessage(chatId, `Hey, do you want to get info about us? Please open this URL: ${shortInfoUrl}`);
         } catch (error) {
           console.error('Error in "info" callback:', error);
           await bot.telegram.sendMessage(chatId, '❌ An error occurred. Please try again.');
