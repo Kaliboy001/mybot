@@ -50,7 +50,8 @@ const BotUserSchema = new mongoose.Schema({
 
 const ChannelUrlSchema = new mongoose.Schema({
   botToken: { type: String, required: true, unique: true },
-  url: { type: String, default: 'https://t.me/Kali_Linux_BOTS' },
+  defaultUrl: { type: String, default: 'https://t.me/Kali_Linux_BOTS' },
+  customUrl: { type: String, default: null },
 });
 
 const BotLimitSchema = new mongoose.Schema({
@@ -117,7 +118,7 @@ const validateBotToken = async (token) => {
 };
 
 const setWebhook = async (token) => {
-  const webhookUrl = `https://mybot-drab.vercel.app/created?token=${encodeURIComponent(token)}`; // Updated webhook URL
+  const webhookUrl = `https://mybot-drab.vercel.app/created/${encodeURIComponent(token)}`;
   try {
     const response = await axios.get(`https://api.telegram.org/bot${token}/setWebhook`, {
       params: { url: webhookUrl },
@@ -706,7 +707,7 @@ makerBot.command('clear', async (ctx) => {
 // Vercel Handler
 module.exports = async (req, res) => {
   try {
-    if (req.method === 'POST') {
+    if (req.method === 'POST' && req.url.startsWith('/maker')) {
       await makerBot.handleUpdate(req.body);
       res.status(200).json({ ok: true });
     } else {
