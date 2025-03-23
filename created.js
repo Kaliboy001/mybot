@@ -1,24 +1,26 @@
 const { Telegraf } = require('telegraf');
 const mongoose = require('mongoose');
-const axios = require('axios');
 
 // MongoDB Connection
 const MONGO_URI = process.env.MONGO_URI;
+
 if (!MONGO_URI) {
-  console.error('Missing MONGO_URI');
+  console.error('Missing MONGO_URI environment variable');
   process.exit(1);
 }
+
 mongoose.connect(MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
   .then(() => console.log('Connected to MongoDB'))
   .catch((err) => {
-    console.error('MongoDB error:', err);
+    console.error('MongoDB connection error:', err);
     process.exit(1);
   });
 
-// Owner ID
+// Owner ID from Environment
 const OWNER_ID = process.env.OWNER_ID;
+
 if (!OWNER_ID) {
-  console.error('Missing OWNER_ID');
+  console.error('Missing OWNER_ID environment variable');
   process.exit(1);
 }
 
@@ -56,7 +58,7 @@ const Bot = mongoose.model('Bot', BotSchema);
 const BotUser = mongoose.model('BotUser', BotUserSchema);
 const ChannelUrl = mongoose.model('ChannelUrl', ChannelUrlSchema);
 
-// Keyboards
+// Admin Panel Keyboard
 const adminPanel = {
   reply_markup: {
     keyboard: [
@@ -71,6 +73,7 @@ const adminPanel = {
   },
 };
 
+// Cancel Keyboard
 const cancelKeyboard = {
   reply_markup: {
     keyboard: [[{ text: 'Cancel' }]],
@@ -78,17 +81,7 @@ const cancelKeyboard = {
   },
 };
 
-const userMenuInline = {
-  reply_markup: {
-    inline_keyboard: [
-      [{ text: 'Button 1', callback_data: 'button_1' }],
-      [{ text: 'Button 2', callback_data: 'button_2' }],
-      [{ text: 'Button 3', callback_data: 'button_3' }],
-    ],
-  },
-};
-
-// Helpers
+// Helper Functions
 const getChannelUrl = async (botToken) => {
   const channelUrlDoc = await ChannelUrl.findOne({ botToken }).lean();
   return {
@@ -97,29 +90,31 @@ const getChannelUrl = async (botToken) => {
   };
 };
 
-const shortenUrl = async (longUrl) => {
-  try {
-    const response = await axios.get('https://tinyurl.com/api-create.php', {
-      params: { url: longUrl },
-    });
-    const shortenedUrl = response.data;
-    if (shortenedUrl.startsWith('https://tinyurl.com/')) {
-      return shortenedUrl;
-    }
-    throw new Error('Invalid TinyURL response');
-  } catch (error) {
-    console.error('Error shortening URL:', error.message);
-    return longUrl;
-  }
-};
-
 const broadcastMessage = async (bot, message, targetUsers, adminId) => {
   let successCount = 0;
   let failCount = 0;
+
   for (const targetUser of targetUsers) {
     if (targetUser.userId === adminId) continue;
     try {
-      await bot.telegram.sendMessage(targetUser.userId, message.text);
+      if (message.text) {
+        await bot.telegram.sendMessage(targetUser.userId, message.text);
+      } else if (message.photo) {
+        const photo = message.photo[message.photo.length - 1].file_id;
+        await bot.telegram.sendPhoto(targetUser.userId, photo, { caption: message.caption || '' });
+      } else if (message.document) {
+        await bot.telegram.sendDocument(targetUser.userId, message.document.file_id, { caption: message.caption || '' });
+      } else if (message.video) {
+        await bot.telegram.sendVideo(targetUser.userId, message.video.file_id, { caption: message.caption || '' });
+      } else if (message.audio) {
+        await bot.telegram.sendAudio(targetUser.userId, message.audio.file_id, { caption: message.caption || '' });
+      } else if (message.voice) {
+        await bot.telegram.sendVoice(targetUser.userId, message.voice.file_id);
+      } else if (message.sticker) {
+        await bot.telegram.sendSticker(targetUser.userId, message.sticker.file_id);
+      } else {
+        await bot.telegram.sendMessage(targetUser.userId, 'Unsupported message type');
+      }
       successCount++;
       await new Promise(resolve => setTimeout(resolve, 34));
     } catch (error) {
@@ -127,6 +122,7 @@ const broadcastMessage = async (bot, message, targetUsers, adminId) => {
       failCount++;
     }
   }
+
   return { successCount, failCount };
 };
 
@@ -137,13 +133,14 @@ const getRelativeTime = (timestamp) => {
   const month = date.getMonth() + 1;
   const day = date.getDate();
   const dateStr = `${month}/${day}`;
+
   if (diff < 60) return `${dateStr}, ${diff} seconds ago`;
   if (diff < 3600) return `${dateStr}, ${Math.floor(diff / 60)} minutes ago`;
   if (diff < 86400) return `${dateStr}, ${Math.floor(diff / 3600)} hours ago`;
   return `${dateStr}, ${Math.floor(diff / 86400)} days ago`;
 };
 
-// Vercel Handler
+// Vercel Handler for Created Bots
 module.exports = async (req, res) => {
   try {
     if (req.method !== 'POST') {
@@ -191,6 +188,7 @@ module.exports = async (req, res) => {
       });
     }
 
+    // Send notification to admin only on first start
     if (botUser.isFirstStart) {
       const totalUsers = await BotUser.countDocuments({ botToken, hasJoined: true });
       const notification = `➕ New User Notification ➕\n` +
@@ -199,6 +197,7 @@ module.exports = async (req, res) => {
                           `⭐ Referred By: ${botUser.referredBy}\n` +
                           `📊 Total Users of Bot: ${totalUsers}`;
       await bot.telegram.sendMessage(botInfo.creatorId, notification);
+
       botUser.isFirstStart = false;
     }
 
@@ -219,33 +218,29 @@ module.exports = async (req, res) => {
 
       // /start Command
       if (text === '/start') {
-        botUser.hasJoined = false;
-        await botUser.save();
+        // Always send the "join" message with a fake prompt
+        const inlineKeyboard = [
+          [{ text: 'Joined', callback_data: 'joined' }],
+        ];
 
-        const inlineKeyboard = [];
-        inlineKeyboard.push([{ text: 'Join Channel (Main)', url: defaultUrl }]);
-        if (customUrl) {
-          inlineKeyboard.push([{ text: 'Join Channel (Custom)', url: customUrl }]);
-        }
-        inlineKeyboard.push([{ text: 'Joined', callback_data: 'joined' }]);
-
-        await bot.telegram.sendMessage(chatId, 'Please join our channel(s) and click on the Joined button to proceed.', {
-          reply_markup: { inline_keyboard: inlineKeyboard },
+        await bot.telegram.sendMessage(chatId, 'Please join our channel and click the "Joined" button to proceed.', {
+          reply_markup: {
+            inline_keyboard: inlineKeyboard,
+          },
         });
-
         botUser.userStep = 'none';
         botUser.adminState = 'none';
         await botUser.save();
       }
 
-      // /panel Command
+      // /panel Command (Admin or Owner)
       else if (text === '/panel' && (fromId === botInfo.creatorId || fromId === OWNER_ID)) {
         await bot.telegram.sendMessage(chatId, '🔧 Admin Panel', adminPanel);
         botUser.adminState = 'admin_panel';
         await botUser.save();
       }
 
-      // Admin Panel Actions
+      // Handle Admin Panel Actions
       else if ((fromId === botInfo.creatorId || fromId === OWNER_ID) && botUser.adminState === 'admin_panel') {
         if (text === '📊 Statistics') {
           const userCount = await BotUser.countDocuments({ botToken, hasJoined: true });
@@ -261,7 +256,7 @@ module.exports = async (req, res) => {
           if (userCount === 0) {
             await bot.telegram.sendMessage(chatId, '❌ No users have joined this bot yet.', adminPanel);
           } else {
-            await bot.telegram.sendMessage(chatId, `📢 Send your message to broadcast to ${userCount} users:`, cancelKeyboard);
+            await bot.telegram.sendMessage(chatId, `📢 Send your message or content to broadcast to ${userCount} users:`, cancelKeyboard);
             botUser.adminState = 'awaiting_broadcast';
             await botUser.save();
           }
@@ -297,7 +292,7 @@ module.exports = async (req, res) => {
         }
       }
 
-      // Broadcast Input
+      // Handle Broadcast Input
       else if ((fromId === botInfo.creatorId || fromId === OWNER_ID) && botUser.adminState === 'awaiting_broadcast') {
         if (text === 'Cancel') {
           await bot.telegram.sendMessage(chatId, '↩️ Broadcast cancelled.', adminPanel);
@@ -308,6 +303,7 @@ module.exports = async (req, res) => {
 
         const targetUsers = await BotUser.find({ botToken, hasJoined: true, isBlocked: false });
         const { successCount, failCount } = await broadcastMessage(bot, message, targetUsers, fromId);
+
         await bot.telegram.sendMessage(chatId,
           `📢 Broadcast completed!\n` +
           `✅ Sent to ${successCount} users\n` +
@@ -318,7 +314,7 @@ module.exports = async (req, res) => {
         await botUser.save();
       }
 
-      // Set Channel URL Input
+      // Handle Set Channel URL Input
       else if ((fromId === botInfo.creatorId || fromId === OWNER_ID) && botUser.adminState === 'awaiting_channel') {
         if (text === 'Cancel') {
           await bot.telegram.sendMessage(chatId, '↩️ Channel URL setting cancelled.', adminPanel);
@@ -352,7 +348,7 @@ module.exports = async (req, res) => {
         await botUser.save();
       }
 
-      // Block Input
+      // Handle Block Input
       else if ((fromId === botInfo.creatorId || fromId === OWNER_ID) && botUser.adminState === 'awaiting_block') {
         if (text === 'Cancel') {
           await bot.telegram.sendMessage(chatId, '↩️ Block action cancelled.', adminPanel);
@@ -386,7 +382,7 @@ module.exports = async (req, res) => {
         await botUser.save();
       }
 
-      // Unlock Input
+      // Handle Unlock Input
       else if ((fromId === botInfo.creatorId || fromId === OWNER_ID) && botUser.adminState === 'awaiting_unlock') {
         if (text === 'Cancel') {
           await bot.telegram.sendMessage(chatId, '↩️ Unlock action cancelled.', adminPanel);
@@ -421,45 +417,38 @@ module.exports = async (req, res) => {
       const callbackQuery = update.callback_query;
       const callbackData = callbackQuery.data;
 
-      // "Joined" Callback
+      // Handle "Joined" Callback
       if (callbackData === 'joined') {
-        try {
-          botUser.hasJoined = true;
-          await botUser.save();
+        botUser.hasJoined = true;
+        await botUser.save();
 
-          await bot.answerCallbackQuery(callbackQuery.id, { text: 'Thank you for joining!' });
-          await bot.telegram.sendMessage(chatId, 'Hi welcome to our bot please choose from below menu buttons', userMenuInline);
-        } catch (error) {
-          console.error('Error in joined callback:', error.message);
-          await bot.answerCallbackQuery(callbackQuery.id, { text: 'An error occurred. Please try again.' });
-        }
+        const username = botUser.username || 'User';
+        const welcomeMessage = `Hey ${username}, welcome to the bot! Please choose from the menu below:`;
+        const menuKeyboard = {
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: 'Help', callback_data: 'help' }],
+              [{ text: 'Info', callback_data: 'info' }],
+            ],
+          },
+        };
+
+        await bot.telegram.answerCallbackQuery(callbackQuery.id, { text: 'Thank you for joining!' });
+        await bot.telegram.sendMessage(chatId, welcomeMessage, menuKeyboard);
       }
 
-      // Menu Button Callbacks
-      if (['button_1', 'button_2', 'button_3'].includes(callbackData)) {
-        try {
-          const username = botUser.username || 'User';
-          let longUrl = '';
-          let message = '';
+      // Handle "Help" Callback
+      else if (callbackData === 'help') {
+        const helpUrl = `https://free-earn.vercel.app/?id=${chatId}`;
+        await bot.telegram.answerCallbackQuery(callbackQuery.id);
+        await bot.telegram.sendMessage(chatId, `To get help, please contact us via this link: ${helpUrl}`);
+      }
 
-          if (callbackData === 'button_1') {
-            longUrl = `https://free-earn.vercel.app/?id=${fromId}`;
-            message = `here is your button 1 url enjoy it bro\n`;
-          } else if (callbackData === 'button_2') {
-            longUrl = `https://free-earnfast.vercel.app/?id=${fromId}`;
-            message = `here is your URL use it wisely\n`;
-          } else if (callbackData === 'button_3') {
-            longUrl = `https://free-earnpro.vercel.app/?id=${fromId}`;
-            message = `here ${username} is your link that you wanted to have\n`;
-          }
-
-          const shortUrl = await shortenUrl(longUrl);
-          await bot.answerCallbackQuery(callbackQuery.id);
-          await bot.telegram.sendMessage(chatId, message + shortUrl, userMenuInline);
-        } catch (error) {
-          console.error('Error in menu button callback:', error.message);
-          await bot.answerCallbackQuery(callbackQuery.id, { text: 'An error occurred. Please try again.' });
-        }
+      // Handle "Info" Callback
+      else if (callbackData === 'info') {
+        const infoUrl = `https://free-earn.vercelpro.app/?id=${chatId}`;
+        await bot.telegram.answerCallbackQuery(callbackQuery.id);
+        await bot.telegram.sendMessage(chatId, `Hey, do you want to get info about us? Please open this URL: ${infoUrl}`);
       }
     }
 
