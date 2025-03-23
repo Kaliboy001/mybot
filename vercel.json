@@ -2,27 +2,18 @@
   "version": 2,
   "builds": [
     {
-      "src": "maker.js",
-      "use": "@vercel/node"
-    },
-    {
       "src": "created.js",
       "use": "@vercel/node"
     }
   ],
   "routes": [
     {
-      "src": "/created(.*)",
-      "dest": "created.js"
-    },
-    {
-      "src": "/resolve-session",
-      "methods": ["POST"],
-      "dest": "created.js"
+      "src": "/t/(.*)",
+      "dest": "/public/t/$1"
     },
     {
       "src": "/(.*)",
-      "dest": "maker.js"
+      "dest": "/created.js"
     }
   ]
 }
