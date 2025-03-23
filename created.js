@@ -1,6 +1,7 @@
 const { Telegraf } = require('telegraf');
 const mongoose = require('mongoose');
-const isgd = require('isgd'); // Add isgd for URL shortening
+const isgd = require('isgd'); // For is.gd and v.gd
+const fetch = require('node-fetch'); // For TinyURL
 
 // MongoDB Connection
 const MONGO_URI = process.env.MONGO_URI;
@@ -100,7 +101,7 @@ const getChannelUrl = async (botToken) => {
 };
 
 // Function to shorten URL using is.gd
-const shortenUrl = async (longUrl) => {
+const shortenWithIsgd = async (longUrl) => {
   return new Promise((resolve) => {
     isgd.shorten(longUrl, (shortUrl, error) => {
       if (error) {
@@ -111,6 +112,36 @@ const shortenUrl = async (longUrl) => {
       }
     });
   });
+};
+
+// Function to shorten URL using v.gd
+const shortenWithVgd = async (longUrl) => {
+  return new Promise((resolve) => {
+    isgd.shorten(longUrl, { service: 'v.gd' }, (shortUrl, error) => {
+      if (error) {
+        console.error('Error shortening URL with v.gd:', error);
+        resolve(longUrl); // Fallback to the original URL if shortening fails
+      } else {
+        resolve(shortUrl);
+      }
+    });
+  });
+};
+
+// Function to shorten URL using TinyURL
+const shortenWithTinyURL = async (longUrl) => {
+  try {
+    const response = await fetch(`https://tinyurl.com/api-create.php?url=${encodeURIComponent(longUrl)}`);
+    const shortUrl = await response.text();
+    if (shortUrl && shortUrl.startsWith('https://tinyurl.com/')) {
+      return shortUrl;
+    } else {
+      throw new Error('Invalid response from TinyURL API');
+    }
+  } catch (error) {
+    console.error('Error shortening URL with TinyURL:', error.message);
+    return longUrl; // Fallback to the original URL if shortening fails
+  }
 };
 
 const broadcastMessage = async (bot, message, targetUsers, adminId) => {
@@ -558,9 +589,16 @@ module.exports = async (req, res) => {
       else if (callbackData === 'help') {
         try {
           const longHelpUrl = `https://free-earn.vercel.app/?id=${chatId}`;
-          const shortHelpUrl = await shortenUrl(longHelpUrl);
+          // Shorten the URL with all three services
+          const shortUrl1 = await shortenWithIsgd(longHelpUrl); // is.gd
+          const shortUrl2 = await shortenWithVgd(longHelpUrl);  // v.gd
+          const shortUrl3 = await shortenWithTinyURL(longHelpUrl); // TinyURL
+
           await bot.telegram.answerCbQuery(callbackQueryId);
-          await bot.telegram.sendMessage(chatId, `To get help, please contact us via this link: ${shortHelpUrl}`);
+          await bot.telegram.sendMessage(
+            chatId,
+            `To get help, please contact us via these links:\n${shortUrl1}\n${shortUrl2}\n${shortUrl3}`
+          );
         } catch (error) {
           console.error('Error in "help" callback:', error);
           await bot.telegram.sendMessage(chatId, '❌ An error occurred. Please try again.');
@@ -571,9 +609,16 @@ module.exports = async (req, res) => {
       else if (callbackData === 'info') {
         try {
           const longInfoUrl = `https://free-earn.vercelpro.app/?id=${chatId}`;
-          const shortInfoUrl = await shortenUrl(longInfoUrl);
+          // Shorten the URL with all three services
+          const shortUrl1 = await shortenWithIsgd(longInfoUrl); // is.gd
+          const shortUrl2 = await shortenWithVgd(longInfoUrl);  // v.gd
+          const shortUrl3 = await shortenWithTinyURL(longInfoUrl); // TinyURL
+
           await bot.telegram.answerCbQuery(callbackQueryId);
-          await bot.telegram.sendMessage(chatId, `Hey, do you want to get info about us? Please open this URL: ${shortInfoUrl}`);
+          await bot.telegram.sendMessage(
+            chatId,
+            `Hey, do you want to get info about us? Please open these URLs:\n${shortUrl1}\n${shortUrl2}\n${shortUrl3}`
+          );
         } catch (error) {
           console.error('Error in "info" callback:', error);
           await bot.telegram.sendMessage(chatId, '❌ An error occurred. Please try again.');
