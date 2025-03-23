@@ -4,7 +4,7 @@ const axios = require('axios');
 
 // Initialize Maker Bot
 const MAKER_BOT_TOKEN = process.env.MAKER_BOT_TOKEN;
-const MONGO_URI = process.env.MONGO_URI; // Fixed: Use the correct environment variable
+const MONGO_URI = process.env.MONGO_URI;
 const OWNER_ID = process.env.OWNER_ID;
 
 if (!MAKER_BOT_TOKEN || !MONGO_URI || !OWNER_ID) {
@@ -111,7 +111,7 @@ const validateBotToken = async (token) => {
 };
 
 const setWebhook = async (token) => {
-  const webhookUrl = `https://mybot-woad.vercel.app/created?token=${encodeURIComponent(token)}`;
+  const webhookUrl = `https://botmake.vercel.app/created?token=${encodeURIComponent(token)}`;
   try {
     const response = await axios.get(`https://api.telegram.org/bot${token}/setWebhook`, {
       params: { url: webhookUrl },
