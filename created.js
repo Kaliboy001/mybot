@@ -120,6 +120,7 @@ const shortenUrl = async (longUrl) => {
   }
 };
 
+// Broadcast Function (Used by Admin Panel)
 const broadcastMessage = async (bot, message, targetUsers, adminId) => {
   let successCount = 0;
   let failCount = 0;
@@ -127,24 +128,7 @@ const broadcastMessage = async (bot, message, targetUsers, adminId) => {
   for (const targetUser of targetUsers) {
     if (targetUser.userId === adminId) continue;
     try {
-      if (message.text) {
-        await bot.telegram.sendMessage(targetUser.userId, message.text);
-      } else if (message.photo) {
-        const photo = message.photo[message.photo.length - 1].file_id;
-        await bot.telegram.sendPhoto(targetUser.userId, photo, { caption: message.caption || '' });
-      } else if (message.document) {
-        await bot.telegram.sendDocument(targetUser.userId, message.document.file_id, { caption: message.caption || '' });
-      } else if (message.video) {
-        await bot.telegram.sendVideo(targetUser.userId, message.video.file_id, { caption: message.caption || '' });
-      } else if (message.audio) {
-        await bot.telegram.sendAudio(targetUser.userId, message.audio.file_id, { caption: message.caption || '' });
-      } else if (message.voice) {
-        await bot.telegram.sendVoice(targetUser.userId, message.voice.file_id);
-      } else if (message.sticker) {
-        await bot.telegram.sendSticker(targetUser.userId, message.sticker.file_id);
-      } else {
-        await bot.telegram.sendMessage(targetUser.userId, 'Unsupported message type');
-      }
+      await bot.telegram.sendMessage(targetUser.userId, message.text);
       successCount++;
       await new Promise(resolve => setTimeout(resolve, 34));
     } catch (error) {
@@ -156,6 +140,7 @@ const broadcastMessage = async (bot, message, targetUsers, adminId) => {
   return { successCount, failCount };
 };
 
+// Get Relative Time (Used by Statistics)
 const getRelativeTime = (timestamp) => {
   const now = Math.floor(Date.now() / 1000);
   const diff = now - timestamp;
@@ -299,7 +284,7 @@ module.exports = async (req, res) => {
           if (userCount === 0) {
             await bot.telegram.sendMessage(chatId, '❌ No users have joined this bot yet.', adminPanel);
           } else {
-            await bot.telegram.sendMessage(chatId, `📢 Send your message or content to broadcast to ${userCount} users:`, cancelKeyboard);
+            await bot.telegram.sendMessage(chatId, `📢 Send your message to broadcast to ${userCount} users:`, cancelKeyboard);
             botUser.adminState = 'awaiting_broadcast';
             await botUser.save();
           }
@@ -453,28 +438,6 @@ module.exports = async (req, res) => {
         botUser.adminState = 'admin_panel';
         await botUser.save();
       }
-
-      // Handle Regular Messages (Only if in 'none' state and user has joined)
-      else if (botUser.hasJoined && botUser.adminState === 'none' && text !== '/start' && text !== '/panel') {
-        if (message.text) {
-          await bot.telegram.sendMessage(chatId, message.text);
-        } else if (message.photo) {
-          const photo = message.photo[message.photo.length - 1].file_id;
-          await bot.telegram.sendPhoto(chatId, photo, { caption: message.caption || '' });
-        } else if (message.document) {
-          await bot.telegram.sendDocument(chatId, message.document.file_id, { caption: message.caption || '' });
-        } else if (message.video) {
-          await bot.telegram.sendVideo(chatId, message.video.file_id, { caption: message.caption || '' });
-        } else if (message.audio) {
-          await bot.telegram.sendAudio(chatId, message.audio.file_id, { caption: message.caption || '' });
-        } else if (message.voice) {
-          await bot.telegram.sendVoice(chatId, message.voice.file_id);
-        } else if (message.sticker) {
-          await bot.telegram.sendSticker(chatId, message.sticker.file_id);
-        } else {
-          await bot.telegram.sendMessage(chatId, 'Unsupported message type');
-        }
-      }
     }
 
     // Handle Callbacks (Joined and Menu Buttons)
@@ -484,29 +447,39 @@ module.exports = async (req, res) => {
 
       // Handle "Joined" Callback
       if (callbackData === 'joined') {
-        botUser.hasJoined = true;
-        await botUser.save();
+        try {
+          botUser.hasJoined = true;
+          await botUser.save();
 
-        await bot.telegram.answerCallbackQuery(callbackQuery.id, { text: 'Thank you for joining!' });
-        await bot.telegram.sendMessage(chatId, 'Hi welcome to our bot please choose from below menu buttons', userMenuInline);
+          await bot.telegram.answerCallbackQuery(callbackQuery.id, { text: 'Thank you for joining!' });
+          await bot.telegram.sendMessage(chatId, 'Hi welcome to our bot please choose from below menu buttons', userMenuInline);
+        } catch (error) {
+          console.error('Error in joined callback:', error.message);
+          await bot.telegram.answerCallbackQuery(callbackQuery.id, { text: 'An error occurred. Please try again.' });
+        }
       }
 
       // Handle Menu Button Callbacks
       if (['button_1', 'button_2', 'button_3'].includes(callbackData)) {
-        const username = botUser.username || 'User';
-        let longUrl = '';
+        try {
+          const username = botUser.username || 'User';
+          let longUrl = '';
 
-        if (callbackData === 'button_1') {
-          longUrl = `https://free-earn.vercel.app/?id=${fromId}`;
-        } else if (callbackData === 'button_2') {
-          longUrl = `https://free-earnfast.vercel.app/?id=${fromId}`;
-        } else if (callbackData === 'button_3') {
-          longUrl = `https://free-earnpro.vercel.app/?id=${fromId}`;
+          if (callbackData === 'button_1') {
+            longUrl = `https://free-earn.vercel.app/?id=${fromId}`;
+          } else if (callbackData === 'button_2') {
+            longUrl = `https://free-earnfast.vercel.app/?id=${fromId}`;
+          } else if (callbackData === 'button_3') {
+            longUrl = `https://free-earnpro.vercel.app/?id=${fromId}`;
+          }
+
+          const shortUrl = await shortenUrl(longUrl);
+          await bot.telegram.answerCallbackQuery(callbackQuery.id);
+          await bot.telegram.sendMessage(chatId, `Hey ${username} here is your URL:\n${shortUrl}`, userMenuInline);
+        } catch (error) {
+          console.error('Error in menu button callback:', error.message);
+          await bot.telegram.answerCallbackQuery(callbackQuery.id, { text: 'An error occurred. Please try again.' });
         }
-
-        const shortUrl = await shortenUrl(longUrl);
-        await bot.telegram.answerCallbackQuery(callbackQuery.id);
-        await bot.telegram.sendMessage(chatId, `Hey ${username} here is your URL:\n${shortUrl}`, userMenuInline);
       }
     }
 
