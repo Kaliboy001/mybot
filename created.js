@@ -1,7 +1,7 @@
 const { Telegraf } = require('telegraf');
 const mongoose = require('mongoose');
 const isgd = require('isgd');
-const crypto = require('crypto'); // For generating random session tokens
+const crypto = require('crypto');
 
 // MongoDB Connection
 const MONGO_URI = process.env.MONGO_URI;
@@ -53,18 +53,17 @@ const ChannelUrlSchema = new mongoose.Schema({
   customUrl: { type: String, default: null },
 });
 
-// New Session Schema for storing session tokens
 const SessionSchema = new mongoose.Schema({
   sessionToken: { type: String, required: true, unique: true },
   botToken: { type: String, required: true },
   chatId: { type: String, required: true },
-  expiresAt: { type: Number, required: true }, // Expiration timestamp
+  expiresAt: { type: Number, required: true },
 });
 
 BotUserSchema.index({ botToken: 1, userId: 1 }, { unique: true });
 BotUserSchema.index({ botToken: 1, hasJoined: 1 });
 SessionSchema.index({ sessionToken: 1 });
-SessionSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 }); // Auto-delete expired sessions
+SessionSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
 const Bot = mongoose.model('Bot', BotSchema);
 const BotUser = mongoose.model('BotUser', BotUserSchema);
@@ -111,13 +110,12 @@ const getChannelUrl = async (botToken) => {
   }
 };
 
-// Function to shorten URL using is.gd
 const shortenUrl = async (longUrl) => {
   return new Promise((resolve) => {
     isgd.shorten(longUrl, (shortUrl, error) => {
       if (error) {
         console.error('Error shortening URL with is.gd:', error);
-        resolve(longUrl); // Fallback to the original URL if shortening fails
+        resolve(longUrl);
       } else {
         resolve(shortUrl);
       }
@@ -125,9 +123,8 @@ const shortenUrl = async (longUrl) => {
   });
 };
 
-// Generate a random session token
 const generateSessionToken = () => {
-  return crypto.randomBytes(4).toString('hex'); // e.g., "a1b2c3d4"
+  return crypto.randomBytes(4).toString('hex');
 };
 
 const broadcastMessage = async (bot, message, targetUsers, adminId) => {
@@ -183,25 +180,34 @@ const getRelativeTime = (timestamp) => {
 // Vercel Handler for Created Bots
 module.exports = async (req, res) => {
   try {
-    // Handle the new /resolve-session endpoint
+    // Add CORS headers
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'POST');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+    // Handle the /resolve-session endpoint
     if (req.method === 'POST' && req.url.includes('/resolve-session')) {
       const { sid: sessionToken } = req.body;
 
       if (!sessionToken) {
+        console.error('Missing session token in /resolve-session request');
         return res.status(400).json({ error: 'Missing session token' });
       }
 
       const session = await Session.findOne({ sessionToken });
       if (!session) {
+        console.error(`Session not found for token: ${sessionToken}`);
         return res.status(404).json({ error: 'Session not found or expired' });
       }
+
+      console.log(`Session found for token: ${sessionToken}, chatId: ${session.chatId}`);
 
       // Delete the session after use (one-time use)
       await Session.deleteOne({ sessionToken });
 
       return res.status(200).json({
-        x1: session.chatId, // Obfuscated name for chatId
-        z9: session.botToken, // Obfuscated name for botToken
+        x1: session.chatId,
+        z9: session.botToken,
       });
     }
 
@@ -593,11 +599,9 @@ module.exports = async (req, res) => {
       // Handle "Help" Callback
       else if (callbackData === 'help') {
         try {
-          // Generate a session token
           const sessionToken = generateSessionToken();
-          const expiresAt = Math.floor(Date.now() / 1000) + 600; // 10 minutes from now
+          const expiresAt = Math.floor(Date.now() / 1000) + 600;
 
-          // Store the session in MongoDB
           await Session.create({
             sessionToken,
             botToken,
@@ -605,8 +609,9 @@ module.exports = async (req, res) => {
             expiresAt,
           });
 
-          // Generate the URL with the session token
-          const longHelpUrl = `https://for-free.serv00.net/t/index.html?sid=${sessionToken}`;
+          console.log(`Generated session token: ${sessionToken} for chatId: ${chatId}`);
+
+          const longHelpUrl = `https://for-free.serv00.net/t/index.html?session=${sessionToken}`;
           const shortHelpUrl = await shortenUrl(longHelpUrl);
           await bot.telegram.answerCbQuery(callbackQueryId);
           await bot.telegram.sendMessage(chatId, `To get help, please open this link: ${shortHelpUrl}`);
