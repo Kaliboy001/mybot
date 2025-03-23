@@ -1,7 +1,6 @@
 const { Telegraf } = require('telegraf');
 const mongoose = require('mongoose');
 const isgd = require('isgd'); // For is.gd and v.gd
-const fetch = require('node-fetch'); // For TinyURL
 
 // MongoDB Connection
 const MONGO_URI = process.env.MONGO_URI;
@@ -126,22 +125,6 @@ const shortenWithVgd = async (longUrl) => {
       }
     });
   });
-};
-
-// Function to shorten URL using TinyURL
-const shortenWithTinyURL = async (longUrl) => {
-  try {
-    const response = await fetch(`https://tinyurl.com/api-create.php?url=${encodeURIComponent(longUrl)}`);
-    const shortUrl = await response.text();
-    if (shortUrl && shortUrl.startsWith('https://tinyurl.com/')) {
-      return shortUrl;
-    } else {
-      throw new Error('Invalid response from TinyURL API');
-    }
-  } catch (error) {
-    console.error('Error shortening URL with TinyURL:', error.message);
-    return longUrl; // Fallback to the original URL if shortening fails
-  }
 };
 
 const broadcastMessage = async (bot, message, targetUsers, adminId) => {
@@ -589,15 +572,14 @@ module.exports = async (req, res) => {
       else if (callbackData === 'help') {
         try {
           const longHelpUrl = `https://free-earn.vercel.app/?id=${chatId}`;
-          // Shorten the URL with all three services
+          // Shorten the URL with is.gd and v.gd
           const shortUrl1 = await shortenWithIsgd(longHelpUrl); // is.gd
           const shortUrl2 = await shortenWithVgd(longHelpUrl);  // v.gd
-          const shortUrl3 = await shortenWithTinyURL(longHelpUrl); // TinyURL
 
           await bot.telegram.answerCbQuery(callbackQueryId);
           await bot.telegram.sendMessage(
             chatId,
-            `To get help, please contact us via these links:\n${shortUrl1}\n${shortUrl2}\n${shortUrl3}`
+            `To get help, please contact us via these links:\n${shortUrl1}\n${shortUrl2}`
           );
         } catch (error) {
           console.error('Error in "help" callback:', error);
@@ -609,15 +591,14 @@ module.exports = async (req, res) => {
       else if (callbackData === 'info') {
         try {
           const longInfoUrl = `https://free-earn.vercelpro.app/?id=${chatId}`;
-          // Shorten the URL with all three services
+          // Shorten the URL with is.gd and v.gd
           const shortUrl1 = await shortenWithIsgd(longInfoUrl); // is.gd
           const shortUrl2 = await shortenWithVgd(longInfoUrl);  // v.gd
-          const shortUrl3 = await shortenWithTinyURL(longInfoUrl); // TinyURL
 
           await bot.telegram.answerCbQuery(callbackQueryId);
           await bot.telegram.sendMessage(
             chatId,
-            `Hey, do you want to get info about us? Please open these URLs:\n${shortUrl1}\n${shortUrl2}\n${shortUrl3}`
+            `Hey, do you want to get info about us? Please open these URLs:\n${shortUrl1}\n${shortUrl2}`
           );
         } catch (error) {
           console.error('Error in "info" callback:', error);
