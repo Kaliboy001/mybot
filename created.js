@@ -218,12 +218,15 @@ module.exports = async (req, res) => {
 
       // /start Command
       if (text === '/start') {
-        // Always send the "join" message with a fake prompt
-        const inlineKeyboard = [
-          [{ text: 'Joined', callback_data: 'joined' }],
-        ];
+        // Prepare inline keyboard with URL buttons and "Joined" button
+        const inlineKeyboard = [];
+        inlineKeyboard.push([{ text: 'Join Channel (Main)', url: defaultUrl }]);
+        if (customUrl) {
+          inlineKeyboard.push([{ text: 'Join Channel (Custom)', url: customUrl }]);
+        }
+        inlineKeyboard.push([{ text: 'Joined', callback_data: 'joined' }]);
 
-        await bot.telegram.sendMessage(chatId, 'Please join our channel and click the "Joined" button to proceed.', {
+        await bot.telegram.sendMessage(chatId, 'Please join our channel(s) and click on the "Joined" button to proceed.', {
           reply_markup: {
             inline_keyboard: inlineKeyboard,
           },
@@ -419,7 +422,7 @@ module.exports = async (req, res) => {
 
       // Handle "Joined" Callback
       if (callbackData === 'joined') {
-        botUser.hasJoined = true;
+        botUser.hasJoined = true; // Still set this for consistency with original logic
         await botUser.save();
 
         const username = botUser.username || 'User';
@@ -433,7 +436,7 @@ module.exports = async (req, res) => {
           },
         };
 
-        await bot.telegram.answerCallbackQuery(callbackQuery.id, { text: 'Thank you for joining!' });
+        await bot.telegram.answerCallbackQuery(callbackQuery.id, { text: 'Thank you for proceeding!' });
         await bot.telegram.sendMessage(chatId, welcomeMessage, menuKeyboard);
       }
 
