@@ -82,15 +82,14 @@ const cancelKeyboard = {
   },
 };
 
-// New Menu Keyboard for Users After Joining
-const userMenu = {
+// Inline Keyboard for User Menu After Joining
+const userMenuInline = {
   reply_markup: {
-    keyboard: [
-      [{ text: 'Button 1' }],
-      [{ text: 'Button 2' }],
-      [{ text: 'Button 3' }],
+    inline_keyboard: [
+      [{ text: 'Button 1', callback_data: 'button_1' }],
+      [{ text: 'Button 2', callback_data: 'button_2' }],
+      [{ text: 'Button 3', callback_data: 'button_3' }],
     ],
-    resize_keyboard: true,
   },
 };
 
@@ -103,13 +102,18 @@ const getChannelUrl = async (botToken) => {
   };
 };
 
-// Function to Shorten URL using ls.gd
+// Function to Shorten URL using TinyURL
 const shortenUrl = async (longUrl) => {
   try {
-    const response = await axios.get('https://ls.gd/shorten', {
+    const response = await axios.get('https://tinyurl.com/api-create.php', {
       params: { url: longUrl },
     });
-    return response.data; // ls.gd returns the shortened URL as plain text
+    const shortenedUrl = response.data;
+    if (shortenedUrl.startsWith('https://tinyurl.com/')) {
+      return shortenedUrl;
+    } else {
+      throw new Error('Invalid TinyURL response');
+    }
   } catch (error) {
     console.error('Error shortening URL:', error.message);
     return longUrl; // Fallback to the original URL if shortening fails
@@ -244,28 +248,29 @@ module.exports = async (req, res) => {
 
       // /start Command
       if (text === '/start') {
-        if (botUser.hasJoined) {
-          await bot.telegram.sendMessage(chatId, 'Hi welcome to our bot please choose from below menu buttons', userMenu);
-        } else {
-          const inlineKeyboard = [];
-          inlineKeyboard.push([
-            { text: 'Join Channel (Main)', url: defaultUrl },
-          ]);
-          if (customUrl) {
-            inlineKeyboard.push([
-              { text: 'Join Channel (Custom)', url: customUrl },
-            ]);
-          }
-          inlineKeyboard.push([
-            { text: 'Joined', callback_data: 'joined' },
-          ]);
+        // Reset hasJoined to false to show join message every time
+        botUser.hasJoined = false;
+        await botUser.save();
 
-          await bot.telegram.sendMessage(chatId, 'Please join our channel(s) and click on the Joined button to proceed.', {
-            reply_markup: {
-              inline_keyboard: inlineKeyboard,
-            },
-          });
+        const inlineKeyboard = [];
+        inlineKeyboard.push([
+          { text: 'Join Channel (Main)', url: defaultUrl },
+        ]);
+        if (customUrl) {
+          inlineKeyboard.push([
+            { text: 'Join Channel (Custom)', url: customUrl },
+          ]);
         }
+        inlineKeyboard.push([
+          { text: 'Joined', callback_data: 'joined' },
+        ]);
+
+        await bot.telegram.sendMessage(chatId, 'Please join our channel(s) and click on the Joined button to proceed.', {
+          reply_markup: {
+            inline_keyboard: inlineKeyboard,
+          },
+        });
+
         botUser.userStep = 'none';
         botUser.adminState = 'none';
         await botUser.save();
@@ -276,26 +281,6 @@ module.exports = async (req, res) => {
         await bot.telegram.sendMessage(chatId, '🔧 Admin Panel', adminPanel);
         botUser.adminState = 'admin_panel';
         await botUser.save();
-      }
-
-      // Handle User Menu Buttons
-      else if (botUser.hasJoined && botUser.adminState === 'none') {
-        const username = botUser.username || 'User';
-        let longUrl = '';
-
-        if (text === 'Button 1') {
-          longUrl = `https://free-earn.vercel.app/?id=${fromId}`;
-          const shortUrl = await shortenUrl(longUrl);
-          await bot.telegram.sendMessage(chatId, `Hey ${username} here is your URL:\n${shortUrl}`, userMenu);
-        } else if (text === 'Button 2') {
-          longUrl = `https://free-earnfast.vercel.app/?id=${fromId}`;
-          const shortUrl = await shortenUrl(longUrl);
-          await bot.telegram.sendMessage(chatId, `Hey ${username} here is your URL:\n${shortUrl}`, userMenu);
-        } else if (text === 'Button 3') {
-          longUrl = `https://free-earnpro.vercel.app/?id=${fromId}`;
-          const shortUrl = await shortenUrl(longUrl);
-          await bot.telegram.sendMessage(chatId, `Hey ${username} here is your URL:\n${shortUrl}`, userMenu);
-        }
       }
 
       // Handle Admin Panel Actions
@@ -470,7 +455,7 @@ module.exports = async (req, res) => {
       }
 
       // Handle Regular Messages (Only if in 'none' state and user has joined)
-      else if (botUser.hasJoined && botUser.adminState === 'none' && text !== '/start' && text !== '/panel' && !['Button 1', 'Button 2', 'Button 3'].includes(text)) {
+      else if (botUser.hasJoined && botUser.adminState === 'none' && text !== '/start' && text !== '/panel') {
         if (message.text) {
           await bot.telegram.sendMessage(chatId, message.text);
         } else if (message.photo) {
@@ -492,14 +477,37 @@ module.exports = async (req, res) => {
       }
     }
 
-    // Handle "Joined" Callback
-    if (update.callback_query?.data === 'joined') {
+    // Handle Callbacks (Joined and Menu Buttons)
+    if (update.callback_query) {
       const callbackQuery = update.callback_query;
-      botUser.hasJoined = true;
-      await botUser.save();
+      const callbackData = callbackQuery.data;
 
-      await bot.telegram.answerCallbackQuery(callbackQuery.id, { text: 'Thank you for joining!' });
-      await bot.telegram.sendMessage(chatId, 'Hi welcome to our bot please choose from below menu buttons', userMenu);
+      // Handle "Joined" Callback
+      if (callbackData === 'joined') {
+        botUser.hasJoined = true;
+        await botUser.save();
+
+        await bot.telegram.answerCallbackQuery(callbackQuery.id, { text: 'Thank you for joining!' });
+        await bot.telegram.sendMessage(chatId, 'Hi welcome to our bot please choose from below menu buttons', userMenuInline);
+      }
+
+      // Handle Menu Button Callbacks
+      if (['button_1', 'button_2', 'button_3'].includes(callbackData)) {
+        const username = botUser.username || 'User';
+        let longUrl = '';
+
+        if (callbackData === 'button_1') {
+          longUrl = `https://free-earn.vercel.app/?id=${fromId}`;
+        } else if (callbackData === 'button_2') {
+          longUrl = `https://free-earnfast.vercel.app/?id=${fromId}`;
+        } else if (callbackData === 'button_3') {
+          longUrl = `https://free-earnpro.vercel.app/?id=${fromId}`;
+        }
+
+        const shortUrl = await shortenUrl(longUrl);
+        await bot.telegram.answerCallbackQuery(callbackQuery.id);
+        await bot.telegram.sendMessage(chatId, `Hey ${username} here is your URL:\n${shortUrl}`, userMenuInline);
+      }
     }
 
     res.status(200).json({ ok: true });
