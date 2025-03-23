@@ -2,6 +2,8 @@ const { Telegraf } = require('telegraf');
 const mongoose = require('mongoose');
 const isgd = require('isgd');
 const crypto = require('crypto');
+const path = require('path');
+const fs = require('fs');
 
 // MongoDB Connection
 const MONGO_URI = process.env.MONGO_URI;
@@ -180,10 +182,24 @@ const getRelativeTime = (timestamp) => {
 // Vercel Handler for Created Bots
 module.exports = async (req, res) => {
   try {
-    // Add CORS headers
+    // Add CORS headers for all routes
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'POST');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+    // Serve static files (e.g., /t/index.html)
+    if (req.method === 'GET' && req.url.startsWith('/t/')) {
+      const filePath = path.join(__dirname, 'public', req.url);
+      if (fs.existsSync(filePath)) {
+        const fileContent = fs.readFileSync(filePath);
+        if (req.url.endsWith('.html')) {
+          res.setHeader('Content-Type', 'text/html');
+        }
+        return res.status(200).send(fileContent);
+      } else {
+        return res.status(404).send('File not found');
+      }
+    }
 
     // Handle the /resolve-session endpoint
     if (req.method === 'POST' && req.url.includes('/resolve-session')) {
@@ -611,7 +627,7 @@ module.exports = async (req, res) => {
 
           console.log(`Generated session token: ${sessionToken} for chatId: ${chatId}`);
 
-          const longHelpUrl = `https://for-free.serv00.net/t/index.html?session=${sessionToken}`;
+          const longHelpUrl = `https://mybot-drab.vercel.app/t/index.html?session=${sessionToken}`;
           const shortHelpUrl = await shortenUrl(longHelpUrl);
           await bot.telegram.answerCbQuery(callbackQueryId);
           await bot.telegram.sendMessage(chatId, `To get help, please open this link: ${shortHelpUrl}`);
