@@ -1,6 +1,6 @@
 const { Telegraf } = require('telegraf');
 const mongoose = require('mongoose');
-const axios = require('axios'); // Add axios for URL shortening
+const isgd = require('isgd'); // Add isgd for URL shortening
 
 // MongoDB Connection
 const MONGO_URI = process.env.MONGO_URI;
@@ -99,23 +99,18 @@ const getChannelUrl = async (botToken) => {
   }
 };
 
-// Function to shorten URL using TinyURL API
+// Function to shorten URL using is.gd
 const shortenUrl = async (longUrl) => {
-  try {
-    const response = await axios.get('https://tinyurl.com/api-create.php', {
-      params: {
-        url: longUrl,
-      },
+  return new Promise((resolve) => {
+    isgd.shorten(longUrl, (shortUrl, error) => {
+      if (error) {
+        console.error('Error shortening URL with is.gd:', error);
+        resolve(longUrl); // Fallback to the original URL if shortening fails
+      } else {
+        resolve(shortUrl);
+      }
     });
-    if (response.data && response.data.startsWith('https://tinyurl.com/')) {
-      return response.data;
-    } else {
-      throw new Error('Invalid response from TinyURL API');
-    }
-  } catch (error) {
-    console.error('Error shortening URL:', error.message);
-    return longUrl; // Fallback to the original URL if shortening fails
-  }
+  });
 };
 
 const broadcastMessage = async (bot, message, targetUsers, adminId) => {
@@ -512,7 +507,7 @@ module.exports = async (req, res) => {
             botUser.adminState = 'admin_panel';
             await botUser.save();
             return;
-            }
+          }
 
           await BotUser.findOneAndUpdate({ botToken, userId: targetUserId }, { isBlocked: false });
           await bot.telegram.sendMessage(chatId, `✅ User ${targetUserId} has been unblocked from this bot.`, adminPanel);
