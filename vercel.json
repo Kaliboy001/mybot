@@ -2,22 +2,42 @@
   "version": 2,
   "builds": [
     {
-      "src": "maker.js",
+      "src": "index.js",
       "use": "@vercel/node"
     },
     {
-      "src": "created.js",
+      "src": "api/maker.js",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "api/created.js",
       "use": "@vercel/node"
     }
   ],
   "routes": [
     {
-      "src": "/created(.*)",
-      "dest": "created.js"
+      "src": "/maker",
+      "methods": ["POST"],
+      "dest": "/api/maker.js"
+    },
+    {
+      "src": "/created/(.*)",
+      "methods": ["POST"],
+      "dest": "/api/created.js"
+    },
+    {
+      "src": "/verify/(.*)",
+      "methods": ["GET"],
+      "dest": "/api/created.js"
+    },
+    {
+      "src": "/resolve-session",
+      "methods": ["POST"],
+      "dest": "/api/created.js"
     },
     {
       "src": "/(.*)",
-      "dest": "maker.js"
+      "dest": "/index.js"
     }
   ]
 }
