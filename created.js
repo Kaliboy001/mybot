@@ -23,20 +23,17 @@ if (!OWNER_ID) {
   process.exit(1);
 }
 
-// Function to generate a random 2-digit number
-const generateRandomNumber = () => {
-  return Math.floor(10 + Math.random() * 90).toString(); // e.g., "12", "34"
+// Function to generate a random character
+const generateRandomChar = () => {
+  const chars = 'abcdefghijklmnopqrstuvwxyz';
+  return chars[Math.floor(Math.random() * chars.length)]; // e.g., 'z', 'q'
 };
 
-// Function to add noise to Base64 string (2-digit numbers at positions 5 and 15)
+// Function to add noise to Base64 string (1 char at start, 1 char at end)
 const addNoiseToBase64 = (base64) => {
-  const noise1 = generateRandomNumber(); // e.g., "12"
-  const noise2 = generateRandomNumber(); // e.g., "34"
-  // Insert noise at positions 5 and 15
-  const part1 = base64.slice(0, 5);
-  const part2 = base64.slice(5, 15);
-  const part3 = base64.slice(15);
-  return `${part1}${noise1}${part2}${noise2}${part3}`;
+  const startChar = generateRandomChar();
+  const endChar = generateRandomChar();
+  return `${startChar}${base64}${endChar}`;
 };
 
 const BotSchema = new mongoose.Schema({
