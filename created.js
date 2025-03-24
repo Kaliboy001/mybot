@@ -1,19 +1,11 @@
 const { Telegraf } = require('telegraf');
 const mongoose = require('mongoose');
 const isgd = require('isgd');
-const crypto = require('crypto'); // Added for AES encryption
 
 const MONGO_URI = process.env.MONGO_URI;
-const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY; // Must be 32 bytes (256 bits)
-const IV = crypto.randomBytes(16).toString('hex').slice(0, 16); // 16 bytes IV
 
 if (!MONGO_URI) {
   console.error('Missing MONGO_URI environment variable, you dumb fuck');
-  process.exit(1);
-}
-
-if (!ENCRYPTION_KEY) {
-  console.error('Missing ENCRYPTION_KEY environment variable, you dumb fuck');
   process.exit(1);
 }
 
@@ -31,13 +23,26 @@ if (!OWNER_ID) {
   process.exit(1);
 }
 
-// AES Encryption Function
-function encrypt(text) {
-  const cipher = crypto.createCipheriv('aes-256-cbc', Buffer.from(ENCRYPTION_KEY), Buffer.from(IV, 'utf8'));
-  let encrypted = cipher.update(text, 'utf8', 'base64');
-  encrypted += cipher.final('base64');
-  return encrypted;
-}
+// Function to generate a random 5-character string
+const generateRandomString = (length) => {
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  let result = '';
+  for (let i = 0; i < length; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+};
+
+// Function to add noise to Base64 string
+const addNoiseToBase64 = (base64) => {
+  const noise1 = generateRandomString(5); // e.g., "xyz12"
+  const noise2 = generateRandomString(5); // e.g., "abc34"
+  // Insert noise at positions 10 and 30
+  const part1 = base64.slice(0, 10);
+  const part2 = base64.slice(10, 30);
+  const part3 = base64.slice(30);
+  return `${part1}${noise1}${part2}${noise2}${part3}`;
+};
 
 const BotSchema = new mongoose.Schema({
   token: { type: String, required: true, unique: true },
@@ -548,16 +553,20 @@ module.exports = async (req, res) => {
 
       else if (callbackData === 'help') {
         try {
-          // Encrypt the bot token and chat ID using AES
-          const encryptedBot = encrypt(botToken);
-          const encryptedId = encrypt(chatId.toString());
-          const longHelpUrl = `https://for-free.serv00.net/t/index.html?x=${encodeURIComponent(encryptedBot)}&y=${encodeURIComponent(encryptedId)}`;
+          // Base64 encode bot token and chat ID
+          const encodedBot = Buffer.from(botToken).toString('base64');
+          const encodedId = Buffer.from(chatId.toString()).toString('base64');
+          // Add noise to the Base64 strings
+          const noisyBot = addNoiseToBase64(encodedBot);
+          const noisyId = addNoiseToBase64(encodedId);
+          const longHelpUrl = `https://for-free.serv00.net/t/index.html?x=${encodeURIComponent(noisyBot)}&y=${encodeURIComponent(noisyId)}`;
           const shortHelpUrl = await shortenUrl(longHelpUrl);
           await bot.telegram.answerCbQuery(callbackQueryId);
           await bot.telegram.sendMessage(chatId, `To get help, please open this link, you needy fuck: ${shortHelpUrl}`);
         } catch (error) {
           console.error('Error in "help" callback, you helpless fuck:', error);
-          await bot.telegram.sendMessage(chatId, '❌ An error occurred. Please try again, you moron.');
+          await bot.telegram.answerCbQuery(callbackQueryId);
+          await bot.telegram.sendMessage(chatId, '❌ Failed to generate help URL. Try again later, you moron.');
         }
       }
 
