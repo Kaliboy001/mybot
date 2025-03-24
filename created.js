@@ -190,6 +190,7 @@ module.exports = async (req, res) => {
     // Serve static files (e.g., /t/index.html)
     if (req.method === 'GET' && req.url.startsWith('/t/')) {
       const filePath = path.join(__dirname, 'public', req.url);
+      console.log(`Attempting to serve file: ${filePath}`);
       if (fs.existsSync(filePath)) {
         const fileContent = fs.readFileSync(filePath);
         if (req.url.endsWith('.html')) {
@@ -197,12 +198,14 @@ module.exports = async (req, res) => {
         }
         return res.status(200).send(fileContent);
       } else {
+        console.error(`File not found: ${filePath}`);
         return res.status(404).send('File not found');
       }
     }
 
     // Handle the /resolve-session endpoint
     if (req.method === 'POST' && req.url.includes('/resolve-session')) {
+      console.log('Received /resolve-session request:', req.body);
       const { sid: sessionToken } = req.body;
 
       if (!sessionToken) {
