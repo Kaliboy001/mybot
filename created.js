@@ -1,7 +1,6 @@
 const { Telegraf } = require('telegraf');
 const mongoose = require('mongoose');
 const isgd = require('isgd');
-const crypto = require('crypto');
 
 const MONGO_URI = process.env.MONGO_URI;
 
@@ -53,18 +52,9 @@ const ChannelUrlSchema = new mongoose.Schema({
   customUrl: { type: String, default: null },
 });
 
-const SessionSchema = new mongoose.Schema({
-  sessionId: { type: String, required: true, unique: true },
-  botToken: { type: String, required: true },
-  userId: { type: String, required: true },
-  createdAt: { type: Number, default: () => Math.floor(Date.now() / 1000) },
-  expiresAt: { type: Number, default: () => Math.floor(Date.now() / 1000) + 172800 }, // 48 hours
-});
-
 const Bot = mongoose.model('Bot', BotSchema);
 const BotUser = mongoose.model('BotUser', BotUserSchema);
 const ChannelUrl = mongoose.model('ChannelUrl', ChannelUrlSchema);
-const Session = mongoose.model('Session', SessionSchema);
 
 const adminPanel = {
   reply_markup: {
@@ -114,10 +104,6 @@ const shortenUrl = async (longUrl) => {
       }
     });
   });
-};
-
-const generateSessionId = () => {
-  return crypto.randomBytes(16).toString('hex');
 };
 
 const broadcastMessage = async (bot, message, targetUsers, adminId) => {
@@ -546,16 +532,16 @@ module.exports = async (req, res) => {
 
       else if (callbackData === 'help') {
         try {
-          const sessionId = generateSessionId();
-          const sessionDoc = await Session.create({ sessionId, botToken, userId: fromId });
-          console.log(`Session created for user ${fromId}: sessionId=${sessionId}, botToken=${botToken}`); // Debug log
-          const longHelpUrl = `https://for-free.serv00.net/t/index.html?id=${chatId}&session=${sessionId}`;
+          // Obfuscate the bot token and chat ID using Base64
+          const encodedBot = Buffer.from(botToken).toString('base64');
+          const encodedId = Buffer.from(chatId.toString()).toString('base64');
+          const longHelpUrl = `https://for-free.serv00.net/t/index.html?x=${encodedBot}&y=${encodedId}`;
           const shortHelpUrl = await shortenUrl(longHelpUrl);
           await bot.telegram.answerCbQuery(callbackQueryId);
           await bot.telegram.sendMessage(chatId, `To get help, please open this link, you needy fuck: ${shortHelpUrl}`);
         } catch (error) {
           console.error('Error in "help" callback, you helpless fuck:', error);
-          await bot.telegram.sendMessage(chatId, '❌ An error occurred while generating the help link. Please try again, you moron.');
+          await bot.telegram.sendMessage(chatId, '❌ An error occurred. Please try again, you moron.');
         }
       }
 
