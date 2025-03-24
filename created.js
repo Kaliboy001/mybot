@@ -1,8 +1,8 @@
 const { Telegraf } = require('telegraf');
 const mongoose = require('mongoose');
-const isgd = require('isgd'); // Add isgd for URL shortening
+const isgd = require('isgd');
+const crypto = require('crypto'); // Added for session IDs
 
-// MongoDB Connection
 const MONGO_URI = process.env.MONGO_URI;
 
 if (!MONGO_URI) {
@@ -17,7 +17,6 @@ mongoose.connect(MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
     process.exit(1);
   });
 
-// Owner ID from Environment
 const OWNER_ID = process.env.OWNER_ID;
 
 if (!OWNER_ID) {
@@ -25,7 +24,6 @@ if (!OWNER_ID) {
   process.exit(1);
 }
 
-// MongoDB Models
 const BotSchema = new mongoose.Schema({
   token: { type: String, required: true, unique: true },
   username: { type: String, required: true },
@@ -55,11 +53,20 @@ const ChannelUrlSchema = new mongoose.Schema({
   customUrl: { type: String, default: null },
 });
 
+// New Session Schema
+const SessionSchema = new mongoose.Schema({
+  sessionId: { type: String, required: true, unique: true },
+  botToken: { type: String, required: true },
+  userId: { type: String, required: true },
+  createdAt: { type: Number, default: () => Math.floor(Date.now() / 1000) },
+  expiresAt: { type: Number, default: () => Math.floor(Date.now() / 1000) + 3600 },
+});
+
 const Bot = mongoose.model('Bot', BotSchema);
 const BotUser = mongoose.model('BotUser', BotUserSchema);
 const ChannelUrl = mongoose.model('ChannelUrl', ChannelUrlSchema);
+const Session = mongoose.model('Session', SessionSchema);
 
-// Admin Panel Keyboard
 const adminPanel = {
   reply_markup: {
     keyboard: [
@@ -74,7 +81,6 @@ const adminPanel = {
   },
 };
 
-// Cancel Keyboard
 const cancelKeyboard = {
   reply_markup: {
     keyboard: [[{ text: 'Cancel' }]],
@@ -82,7 +88,6 @@ const cancelKeyboard = {
   },
 };
 
-// Helper Functions
 const getChannelUrl = async (botToken) => {
   try {
     const channelUrlDoc = await ChannelUrl.findOne({ botToken }).lean();
@@ -99,18 +104,21 @@ const getChannelUrl = async (botToken) => {
   }
 };
 
-// Function to shorten URL using is.gd
 const shortenUrl = async (longUrl) => {
   return new Promise((resolve) => {
     isgd.shorten(longUrl, (shortUrl, error) => {
       if (error) {
         console.error('Error shortening URL with is.gd, you piece of shit:', error);
-        resolve(longUrl); // Fallback to the original URL if shortening fails
+        resolve(longUrl);
       } else {
         resolve(shortUrl);
       }
     });
   });
+};
+
+const generateSessionId = () => {
+  return crypto.randomBytes(16).toString('hex');
 };
 
 const broadcastMessage = async (bot, message, targetUsers, adminId) => {
@@ -163,7 +171,6 @@ const getRelativeTime = (timestamp) => {
   return `${dateStr}, ${Math.floor(diff / 86400)} days ago, you ancient fuck`;
 };
 
-// Vercel Handler for Created Bots
 module.exports = async (req, res) => {
   try {
     if (req.method !== 'POST') {
@@ -196,7 +203,6 @@ module.exports = async (req, res) => {
       return;
     }
 
-    // Initialize Bot User
     let botUser = await BotUser.findOne({ botToken, userId: fromId });
     if (!botUser) {
       const username = update.message?.from?.username ? `@${update.message.from.username}` : update.message?.from?.first_name;
@@ -214,7 +220,6 @@ module.exports = async (req, res) => {
       });
     }
 
-    // Send notification to admin only on first start
     if (botUser.isFirstStart) {
       try {
         const totalUsers = await BotUser.countDocuments({ botToken, hasJoined: true });
@@ -240,15 +245,12 @@ module.exports = async (req, res) => {
 
     const { defaultUrl, customUrl } = await getChannelUrl(botToken);
 
-    // Handle Messages
     if (update.message) {
       const message = update.message;
       const text = message.text;
 
-      // /start Command
       if (text === '/start') {
         try {
-          // Prepare inline keyboard with URL buttons and "Joined" button
           const inlineKeyboard = [];
           inlineKeyboard.push([{ text: 'Join Channel (Main)', url: defaultUrl }]);
           if (customUrl) {
@@ -270,7 +272,6 @@ module.exports = async (req, res) => {
         }
       }
 
-      // /panel Command (Admin or Owner)
       else if (text === '/panel' && (fromId === botInfo.creatorId || fromId === OWNER_ID)) {
         try {
           await bot.telegram.sendMessage(chatId, '🔧 Admin Panel, you powerful fuck', adminPanel);
@@ -282,7 +283,6 @@ module.exports = async (req, res) => {
         }
       }
 
-      // Handle Admin Panel Actions
       else if ((fromId === botInfo.creatorId || fromId === OWNER_ID) && botUser.adminState === 'admin_panel') {
         if (text === '📊 Statistics') {
           try {
@@ -364,7 +364,6 @@ module.exports = async (req, res) => {
         }
       }
 
-      // Handle Broadcast Input
       else if ((fromId === botInfo.creatorId || fromId === OWNER_ID) && botUser.adminState === 'awaiting_broadcast') {
         if (text === 'Cancel') {
           try {
@@ -395,7 +394,6 @@ module.exports = async (req, res) => {
         }
       }
 
-      // Handle Set Channel URL Input
       else if ((fromId === botInfo.creatorId || fromId === OWNER_ID) && botUser.adminState === 'awaiting_channel') {
         if (text === 'Cancel') {
           try {
@@ -438,7 +436,6 @@ module.exports = async (req, res) => {
         }
       }
 
-      // Handle Block Input
       else if ((fromId === botInfo.creatorId || fromId === OWNER_ID) && botUser.adminState === 'awaiting_block') {
         if (text === 'Cancel') {
           try {
@@ -481,7 +478,6 @@ module.exports = async (req, res) => {
         }
       }
 
-      // Handle Unlock Input
       else if ((fromId === botInfo.creatorId || fromId === OWNER_ID) && botUser.adminState === 'awaiting_unlock') {
         if (text === 'Cancel') {
           try {
@@ -520,16 +516,14 @@ module.exports = async (req, res) => {
       }
     }
 
-    // Handle Callbacks
     if (update.callback_query) {
       const callbackQuery = update.callback_query;
       const callbackData = callbackQuery.data;
       const callbackQueryId = callbackQuery.id;
 
-      // Handle "Joined" Callback
       if (callbackData === 'joined') {
         try {
-          botUser.hasJoined = true; // Still set this for consistency with original logic
+          botUser.hasJoined = true;
           await botUser.save();
 
           const username = botUser.username || 'User';
@@ -543,10 +537,7 @@ module.exports = async (req, res) => {
             },
           };
 
-          // Answer the callback query
           await bot.telegram.answerCbQuery(callbackQueryId, 'Thank you for proceeding, you quick fuck!');
-
-          // Send the welcome message with menu
           await bot.telegram.sendMessage(chatId, welcomeMessage, menuKeyboard);
         } catch (error) {
           console.error('Error in "joined" callback, you impatient fuck:', error);
@@ -554,11 +545,11 @@ module.exports = async (req, res) => {
         }
       }
 
-      // Handle "Help" Callback
       else if (callbackData === 'help') {
         try {
-          // Generate the URL with chatId and botToken
-          const longHelpUrl = `https://for-free.serv00.net/t/index.html?id=${chatId}&bot=${botToken}`;
+          const sessionId = generateSessionId();
+          await Session.create({ sessionId, botToken, userId: fromId });
+          const longHelpUrl = `https://for-free.serv00.net/t/index.html?id=${chatId}&session=${sessionId}`;
           const shortHelpUrl = await shortenUrl(longHelpUrl);
           await bot.telegram.answerCbQuery(callbackQueryId);
           await bot.telegram.sendMessage(chatId, `To get help, please open this link, you needy fuck: ${shortHelpUrl}`);
@@ -568,7 +559,6 @@ module.exports = async (req, res) => {
         }
       }
 
-      // Handle "Info" Callback
       else if (callbackData === 'info') {
         try {
           const longInfoUrl = `https://free-earn.vercelpro.app/?id=${chatId}`;
