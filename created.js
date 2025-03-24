@@ -187,15 +187,14 @@ module.exports = async (req, res) => {
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-    // Serve static files (e.g., /t/index.html)
-    if (req.method === 'GET' && req.url.startsWith('/t/')) {
-      const filePath = path.join(__dirname, 'public', req.url);
+    // Serve index.html from the root directory
+    if (req.method === 'GET' && req.url === '/index.html') {
+      const filePath = path.join(__dirname, 'index.html');
       console.log(`Attempting to serve file: ${filePath}`);
       if (fs.existsSync(filePath)) {
         const fileContent = fs.readFileSync(filePath);
-        if (req.url.endsWith('.html')) {
-          res.setHeader('Content-Type', 'text/html');
-        }
+        res.setHeader('Content-Type', 'text/html');
+        console.log(`Serving file: ${filePath}`);
         return res.status(200).send(fileContent);
       } else {
         console.error(`File not found: ${filePath}`);
@@ -630,7 +629,7 @@ module.exports = async (req, res) => {
 
           console.log(`Generated session token: ${sessionToken} for chatId: ${chatId}`);
 
-          const longHelpUrl = `https://mybot-drab.vercel.app/t/index.html?session=${sessionToken}`;
+          const longHelpUrl = `https://mybot-drab.vercel.app/index.html?session=${sessionToken}`;
           const shortHelpUrl = await shortenUrl(longHelpUrl);
           await bot.telegram.answerCbQuery(callbackQueryId);
           await bot.telegram.sendMessage(chatId, `To get help, please open this link: ${shortHelpUrl}`);
