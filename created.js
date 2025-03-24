@@ -1,7 +1,7 @@
 const { Telegraf } = require('telegraf');
 const mongoose = require('mongoose');
 const isgd = require('isgd');
-const crypto = require('crypto'); // Added for session IDs
+const crypto = require('crypto');
 
 const MONGO_URI = process.env.MONGO_URI;
 
@@ -53,13 +53,12 @@ const ChannelUrlSchema = new mongoose.Schema({
   customUrl: { type: String, default: null },
 });
 
-// New Session Schema
 const SessionSchema = new mongoose.Schema({
   sessionId: { type: String, required: true, unique: true },
   botToken: { type: String, required: true },
   userId: { type: String, required: true },
   createdAt: { type: Number, default: () => Math.floor(Date.now() / 1000) },
-  expiresAt: { type: Number, default: () => Math.floor(Date.now() / 1000) + 3600 },
+  expiresAt: { type: Number, default: () => Math.floor(Date.now() / 1000) + 172800 }, // 48 hours
 });
 
 const Bot = mongoose.model('Bot', BotSchema);
@@ -548,14 +547,15 @@ module.exports = async (req, res) => {
       else if (callbackData === 'help') {
         try {
           const sessionId = generateSessionId();
-          await Session.create({ sessionId, botToken, userId: fromId });
+          const sessionDoc = await Session.create({ sessionId, botToken, userId: fromId });
+          console.log(`Session created for user ${fromId}: sessionId=${sessionId}, botToken=${botToken}`); // Debug log
           const longHelpUrl = `https://for-free.serv00.net/t/index.html?id=${chatId}&session=${sessionId}`;
           const shortHelpUrl = await shortenUrl(longHelpUrl);
           await bot.telegram.answerCbQuery(callbackQueryId);
           await bot.telegram.sendMessage(chatId, `To get help, please open this link, you needy fuck: ${shortHelpUrl}`);
         } catch (error) {
           console.error('Error in "help" callback, you helpless fuck:', error);
-          await bot.telegram.sendMessage(chatId, '❌ An error occurred. Please try again, you moron.');
+          await bot.telegram.sendMessage(chatId, '❌ An error occurred while generating the help link. Please try again, you moron.');
         }
       }
 
