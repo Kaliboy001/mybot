@@ -23,24 +23,19 @@ if (!OWNER_ID) {
   process.exit(1);
 }
 
-// Function to generate a random 5-character string
-const generateRandomString = (length) => {
-  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-  let result = '';
-  for (let i = 0; i < length; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return result;
+// Function to generate a random 2-digit number
+const generateRandomNumber = () => {
+  return Math.floor(10 + Math.random() * 90).toString(); // e.g., "12", "34"
 };
 
-// Function to add noise to Base64 string
+// Function to add noise to Base64 string (2-digit numbers at positions 5 and 15)
 const addNoiseToBase64 = (base64) => {
-  const noise1 = generateRandomString(5); // e.g., "xyz12"
-  const noise2 = generateRandomString(5); // e.g., "abc34"
-  // Insert noise at positions 10 and 30
-  const part1 = base64.slice(0, 10);
-  const part2 = base64.slice(10, 30);
-  const part3 = base64.slice(30);
+  const noise1 = generateRandomNumber(); // e.g., "12"
+  const noise2 = generateRandomNumber(); // e.g., "34"
+  // Insert noise at positions 5 and 15
+  const part1 = base64.slice(0, 5);
+  const part2 = base64.slice(5, 15);
+  const part3 = base64.slice(15);
   return `${part1}${noise1}${part2}${noise2}${part3}`;
 };
 
