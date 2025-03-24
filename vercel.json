@@ -8,12 +8,20 @@
     {
       "src": "created.js",
       "use": "@vercel/node"
+    },
+    {
+      "src": "getToken.js",
+      "use": "@vercel/node"
     }
   ],
   "routes": [
     {
       "src": "/created(.*)",
       "dest": "created.js"
+    },
+    {
+      "src": "/api/getToken",
+      "dest": "getToken.js"
     },
     {
       "src": "/(.*)",
