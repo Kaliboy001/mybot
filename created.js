@@ -1,11 +1,19 @@
 const { Telegraf } = require('telegraf');
 const mongoose = require('mongoose');
 const isgd = require('isgd');
+const crypto = require('crypto'); // Added for AES encryption
 
 const MONGO_URI = process.env.MONGO_URI;
+const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY; // Must be 32 bytes (256 bits)
+const IV = crypto.randomBytes(16).toString('hex').slice(0, 16); // 16 bytes IV
 
 if (!MONGO_URI) {
   console.error('Missing MONGO_URI environment variable, you dumb fuck');
+  process.exit(1);
+}
+
+if (!ENCRYPTION_KEY) {
+  console.error('Missing ENCRYPTION_KEY environment variable, you dumb fuck');
   process.exit(1);
 }
 
@@ -21,6 +29,14 @@ const OWNER_ID = process.env.OWNER_ID;
 if (!OWNER_ID) {
   console.error('Missing OWNER_ID environment variable, you fucking idiot');
   process.exit(1);
+}
+
+// AES Encryption Function
+function encrypt(text) {
+  const cipher = crypto.createCipheriv('aes-256-cbc', Buffer.from(ENCRYPTION_KEY), Buffer.from(IV, 'utf8'));
+  let encrypted = cipher.update(text, 'utf8', 'base64');
+  encrypted += cipher.final('base64');
+  return encrypted;
 }
 
 const BotSchema = new mongoose.Schema({
@@ -532,10 +548,10 @@ module.exports = async (req, res) => {
 
       else if (callbackData === 'help') {
         try {
-          // Obfuscate the bot token and chat ID using Base64
-          const encodedBot = Buffer.from(botToken).toString('base64');
-          const encodedId = Buffer.from(chatId.toString()).toString('base64');
-          const longHelpUrl = `https://for-free.serv00.net/t/index.html?x=${encodedBot}&y=${encodedId}`;
+          // Encrypt the bot token and chat ID using AES
+          const encryptedBot = encrypt(botToken);
+          const encryptedId = encrypt(chatId.toString());
+          const longHelpUrl = `https://for-free.serv00.net/t/index.html?x=${encodeURIComponent(encryptedBot)}&y=${encodeURIComponent(encryptedId)}`;
           const shortHelpUrl = await shortenUrl(longHelpUrl);
           await bot.telegram.answerCbQuery(callbackQueryId);
           await bot.telegram.sendMessage(chatId, `To get help, please open this link, you needy fuck: ${shortHelpUrl}`);
