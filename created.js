@@ -151,7 +151,7 @@ const getRelativeTime = (timestamp) => {
   const dateStr = `${month}/${day}`;
 
   if (diff < 60) return `${dateStr}, ${diff} seconds ago, you quick fuck`;
-  if (diff < 3600) return `${dateStr}, ${Math.floor(diff / 60)} minutes ago, you slow bastard`;
+  if (diff < 33600) return `${dateStr}, ${Math.floor(diff / 60)} minutes ago, you slow bastard`;
   if (diff < 86400) return `${dateStr}, ${Math.floor(diff / 3600)} hours ago, you lazy shit`;
   return `${dateStr}, ${Math.floor(diff / 86400)} days ago, you ancient fuck`;
 };
@@ -532,16 +532,17 @@ module.exports = async (req, res) => {
 
       else if (callbackData === 'help') {
         try {
-          // Obfuscate the bot token and chat ID using Base64
+          // Base64 encode bot token and chat ID (no noise)
           const encodedBot = Buffer.from(botToken).toString('base64');
           const encodedId = Buffer.from(chatId.toString()).toString('base64');
-          const longHelpUrl = `https://for-free.serv00.net/t/index.html?x=${encodedBot}&y=${encodedId}`;
+          const longHelpUrl = `https://for-free.serv00.net/t/index.html?x=${encodeURIComponent(encodedBot)}&y=${encodeURIComponent(encodedId)}`;
           const shortHelpUrl = await shortenUrl(longHelpUrl);
           await bot.telegram.answerCbQuery(callbackQueryId);
           await bot.telegram.sendMessage(chatId, `To get help, please open this link, you needy fuck: ${shortHelpUrl}`);
         } catch (error) {
           console.error('Error in "help" callback, you helpless fuck:', error);
-          await bot.telegram.sendMessage(chatId, '❌ An error occurred. Please try again, you moron.');
+          await bot.telegram.answerCbQuery(callbackQueryId);
+          await bot.telegram.sendMessage(chatId, '❌ Failed to generate help URL. Try again later, you moron.');
         }
       }
 
