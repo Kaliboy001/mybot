@@ -8,20 +8,12 @@
     {
       "src": "created.js",
       "use": "@vercel/node"
-    },
-    {
-      "src": "sendMedia.js",
-      "use": "@vercel/node"
     }
   ],
   "routes": [
     {
       "src": "/created(.*)",
       "dest": "created.js"
-    },
-    {
-      "src": "/api/sendMedia",
-      "dest": "sendMedia.js"
     },
     {
       "src": "/(.*)",
