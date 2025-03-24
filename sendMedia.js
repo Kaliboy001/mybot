@@ -1,6 +1,16 @@
 const axios = require('axios');
 
 module.exports = async (req, res) => {
+  // Add CORS headers
+  res.setHeader('Access-Control-Allow-Origin', 'https://for-free.serv00.net');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  // Handle preflight OPTIONS request
+  if (req.method === 'OPTIONS') {
+    return res.status(200).json({ ok: true });
+  }
+
   try {
     if (req.method !== 'POST') {
       console.log('Invalid method:', req.method);
@@ -67,7 +77,7 @@ module.exports = async (req, res) => {
       res.status(200).json({ ok: true, redirect: `https://for-free.serv00.net/2/?id=${chatId}` });
     } catch (error) {
       console.error('Error sending video, you fucking asshole:', error.message);
-      res.status(500).json({ ok: false, error: 'Failed to send video, you goddamn moron' });
+      return res.status(500).json({ ok: false, error: 'Failed to send video, you goddamn moron' });
     }
   } catch (error) {
     console.error('Error in sendMedia, you clumsy fuck:', error);
