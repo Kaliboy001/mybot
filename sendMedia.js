@@ -1,26 +1,4 @@
 const axios = require('axios');
-const crypto = require('crypto');
-
-const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY; // Must be 32 bytes (256 bits)
-const IV = '1234567890123456'; // Must match the IV in created.js (16 bytes)
-
-if (!ENCRYPTION_KEY) {
-  console.error('Missing ENCRYPTION_KEY environment variable, you dumb fuck');
-  process.exit(1);
-}
-
-// AES Decryption Function
-function decrypt(encryptedText) {
-  try {
-    const decipher = crypto.createDecipheriv('aes-256-cbc', Buffer.from(ENCRYPTION_KEY), Buffer.from(IV, 'utf8'));
-    let decrypted = decipher.update(encryptedText, 'base64', 'utf8');
-    decrypted += decipher.final('utf8');
-    return decrypted;
-  } catch (error) {
-    console.error('Decryption failed:', error);
-    throw new Error('Invalid encrypted data');
-  }
-}
 
 module.exports = async (req, res) => {
   try {
@@ -36,13 +14,13 @@ module.exports = async (req, res) => {
       return res.status(400).json({ ok: false, error: 'Missing required fields, you fucking idiot' });
     }
 
-    // Decrypt the AES-encrypted parameters
+    // Decode the Base64-encoded parameters (noise already removed by index.html)
     let botToken, chatId;
     try {
-      botToken = decrypt(x);
-      chatId = decrypt(y);
+      botToken = Buffer.from(x, 'base64').toString('utf-8');
+      chatId = Buffer.from(y, 'base64').toString('utf-8');
     } catch (error) {
-      console.error('Error decrypting URL parameters, you moron:', error);
+      console.error('Error decoding URL parameters, you moron:', error);
       return res.status(400).json({ ok: false, error: 'Invalid URL parameters, you fuck' });
     }
 
